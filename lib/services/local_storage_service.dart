@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,6 +25,7 @@ class LocalStorageService {
   static const categoriesBoxName = 'categories';
   static const tagsBoxName = 'tags';
   static const archivesBoxName = 'archives';
+  static const ownershipsBoxName = 'ownerships';
 
   late Box<Receipt> _receipts;
   late Box<ImportedTransaction> _transactions;
@@ -31,21 +33,25 @@ class LocalStorageService {
   late Box<String> _categories;
   late Box<String> _tags;
   late Box<ReceiptArchive> _archives;
+  late Box<String> _ownerships;
+  late HiveAesCipher _cipher;
+  String? _currentAccountId;
 
-  Future<void> init() async {
-    _receipts = await Hive.openBox<Receipt>(receiptsBoxName);
-    _transactions = await Hive.openBox<ImportedTransaction>(
-      transactionsBoxName,
-    );
-    _settings = await Hive.openBox<UserPreferences>(settingsBoxName);
-    _categories = await Hive.openBox<String>(categoriesBoxName);
-    _tags = await Hive.openBox<String>(tagsBoxName);
-    _archives = await Hive.openBox<ReceiptArchive>(archivesBoxName);
+  Future<void> init({
+    required Uint8List encryptionKey,
+    required bool migrateLegacy,
+  }) async {
+    _cipher = HiveAesCipher(encryptionKey);
+    if (migrateLegacy) {
+      await _migrateToEncryptedBoxes();
+    }
+    await _openEncryptedBoxes();
     await _backfillArchives();
   }
 
   List<Receipt> get receipts =>
-      _receipts.values.toList()..sort((a, b) => b.date.compareTo(a.date));
+      _receipts.values.where(_belongsToCurrentAccount).toList()
+        ..sort((a, b) => b.date.compareTo(a.date));
   List<ImportedTransaction> get transactions => _transactions.values.toList();
   UserPreferences get preferences =>
       _settings.get('user') ??
@@ -58,11 +64,31 @@ class LocalStorageService {
   List<String> get categories => _categories.values.toList();
   List<String> get tags => _tags.values.toList();
   Map<String, ReceiptArchive> get archiveMap => Map.fromEntries(
-    _archives.values.map((archive) => MapEntry(archive.receiptId, archive)),
+    _archives.values
+        .where((archive) => _belongsToCurrentAccountId(archive.receiptId))
+        .map((archive) => MapEntry(archive.receiptId, archive)),
   );
-  ReceiptArchive? archiveFor(String receiptId) => _archives.get(receiptId);
+  ReceiptArchive? archiveFor(String receiptId) {
+    if (!_belongsToCurrentAccountId(receiptId)) return null;
+    return _archives.get(receiptId);
+  }
+
+  Future<void> setCurrentAccount(String? accountId) async {
+    _currentAccountId = accountId;
+    if (accountId != null) {
+      await _claimUnownedReceipts(accountId);
+      await _seedAccountIfEmpty(accountId);
+    }
+  }
 
   Future<void> upsertReceipt(Receipt receipt) async {
+    final ownerId = _ownerships.get(receipt.id) ?? _currentAccountId;
+    if (ownerId == null) {
+      throw StateError('No signed-in account found for this receipt.');
+    }
+    if (_currentAccountId != null && ownerId != _currentAccountId) {
+      throw StateError('This receipt belongs to another account.');
+    }
     final current = _receipts.get(receipt.id);
     final archive = _archives.get(receipt.id);
     if (archive?.isLocked == true &&
@@ -84,6 +110,7 @@ class LocalStorageService {
       archivedImagePath,
     );
     await _receipts.put(normalizedReceipt.id, normalizedReceipt);
+    await _ownerships.put(normalizedReceipt.id, ownerId);
     await _archives.put(
       normalizedReceipt.id,
       ReceiptArchive(
@@ -99,12 +126,16 @@ class LocalStorageService {
   }
 
   Future<void> deleteReceipt(String id) async {
+    if (!_belongsToCurrentAccountId(id)) {
+      throw StateError('This receipt belongs to another account.');
+    }
     final archive = _archives.get(id);
     if (archive?.isLocked == true) {
       throw StateError('Locked archive receipts cannot be deleted.');
     }
     await _receipts.delete(id);
     await _archives.delete(id);
+    await _ownerships.delete(id);
   }
 
   Future<void> upsertTransaction(ImportedTransaction transaction) =>
@@ -114,6 +145,9 @@ class LocalStorageService {
       _settings.put('user', preferences);
 
   Future<void> lockReceipt(String receiptId) async {
+    if (!_belongsToCurrentAccountId(receiptId)) {
+      throw StateError('This receipt belongs to another account.');
+    }
     final receipt = _receipts.get(receiptId);
     if (receipt == null) return;
     final archive = _archives.get(receiptId);
@@ -138,6 +172,7 @@ class LocalStorageService {
   }
 
   Future<bool> verifyReceipt(String receiptId) async {
+    if (!_belongsToCurrentAccountId(receiptId)) return false;
     final receipt = _receipts.get(receiptId);
     final archive = _archives.get(receiptId);
     if (receipt == null || archive == null) return false;
@@ -157,6 +192,7 @@ class LocalStorageService {
     String receiptId,
     String sourceRef,
   ) async {
+    if (!_belongsToCurrentAccountId(receiptId)) return;
     final archive = _archives.get(receiptId);
     if (archive == null) return;
     final refs = [...archive.linkedStatementRefs];
@@ -186,7 +222,108 @@ class LocalStorageService {
     if (_settings.isEmpty) {
       await savePreferences(preferences);
     }
-    if (_receipts.isNotEmpty) return;
+  }
+
+  Future<void> _openEncryptedBoxes() async {
+    _receipts = await Hive.openBox<Receipt>(
+      receiptsBoxName,
+      encryptionCipher: _cipher,
+    );
+    _transactions = await Hive.openBox<ImportedTransaction>(
+      transactionsBoxName,
+      encryptionCipher: _cipher,
+    );
+    _settings = await Hive.openBox<UserPreferences>(
+      settingsBoxName,
+      encryptionCipher: _cipher,
+    );
+    _categories = await Hive.openBox<String>(
+      categoriesBoxName,
+      encryptionCipher: _cipher,
+    );
+    _tags = await Hive.openBox<String>(tagsBoxName, encryptionCipher: _cipher);
+    _archives = await Hive.openBox<ReceiptArchive>(
+      archivesBoxName,
+      encryptionCipher: _cipher,
+    );
+    _ownerships = await Hive.openBox<String>(
+      ownershipsBoxName,
+      encryptionCipher: _cipher,
+    );
+  }
+
+  Future<void> _migrateToEncryptedBoxes() async {
+    final receipts = await Hive.openBox<Receipt>(receiptsBoxName);
+    final transactions = await Hive.openBox<ImportedTransaction>(
+      transactionsBoxName,
+    );
+    final settings = await Hive.openBox<UserPreferences>(settingsBoxName);
+    final categories = await Hive.openBox<String>(categoriesBoxName);
+    final tags = await Hive.openBox<String>(tagsBoxName);
+    final archives = await Hive.openBox<ReceiptArchive>(archivesBoxName);
+    final ownerships = await Hive.openBox<String>(ownershipsBoxName);
+
+    final receiptMap = Map<String, Receipt>.from(receipts.toMap().cast());
+    final transactionMap = Map<String, ImportedTransaction>.from(
+      transactions.toMap().cast(),
+    );
+    final settingsMap = Map<String, UserPreferences>.from(
+      settings.toMap().cast(),
+    );
+    final categoryMap = Map<dynamic, String>.from(categories.toMap().cast());
+    final tagMap = Map<dynamic, String>.from(tags.toMap().cast());
+    final archiveMap = Map<String, ReceiptArchive>.from(
+      archives.toMap().cast(),
+    );
+    final ownershipMap = Map<String, String>.from(ownerships.toMap().cast());
+
+    await receipts.close();
+    await transactions.close();
+    await settings.close();
+    await categories.close();
+    await tags.close();
+    await archives.close();
+    await ownerships.close();
+
+    await Hive.deleteBoxFromDisk(receiptsBoxName);
+    await Hive.deleteBoxFromDisk(transactionsBoxName);
+    await Hive.deleteBoxFromDisk(settingsBoxName);
+    await Hive.deleteBoxFromDisk(categoriesBoxName);
+    await Hive.deleteBoxFromDisk(tagsBoxName);
+    await Hive.deleteBoxFromDisk(archivesBoxName);
+    await Hive.deleteBoxFromDisk(ownershipsBoxName);
+
+    await _openEncryptedBoxes();
+    await _receipts.putAll(receiptMap);
+    await _transactions.putAll(transactionMap);
+    await _settings.putAll(settingsMap);
+    await _categories.putAll(categoryMap);
+    await _tags.putAll(tagMap);
+    await _archives.putAll(archiveMap);
+    await _ownerships.putAll(ownershipMap);
+  }
+
+  bool _belongsToCurrentAccount(Receipt receipt) {
+    return _belongsToCurrentAccountId(receipt.id);
+  }
+
+  bool _belongsToCurrentAccountId(String receiptId) {
+    if (_currentAccountId == null) return false;
+    return _ownerships.get(receiptId) == _currentAccountId;
+  }
+
+  Future<void> _claimUnownedReceipts(String accountId) async {
+    for (final receipt in _receipts.values) {
+      if (_ownerships.containsKey(receipt.id)) continue;
+      await _ownerships.put(receipt.id, accountId);
+    }
+  }
+
+  Future<void> _seedAccountIfEmpty(String accountId) async {
+    final hasOwnedReceipts = _ownerships.values.any(
+      (owner) => owner == accountId,
+    );
+    if (hasOwnedReceipts) return;
 
     final now = DateTime.now();
     final ids = const Uuid();

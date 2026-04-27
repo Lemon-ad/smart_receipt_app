@@ -12,10 +12,16 @@ import '../theme/app_theme.dart';
 import '../widgets/app_card.dart';
 
 class ReceiptReviewScreen extends ConsumerStatefulWidget {
-  const ReceiptReviewScreen({super.key, this.imagePath, this.existingReceipt});
+  const ReceiptReviewScreen({
+    super.key,
+    this.imagePath,
+    this.existingReceipt,
+    this.manualEntry = false,
+  });
 
   final String? imagePath;
   final Receipt? existingReceipt;
+  final bool manualEntry;
 
   @override
   ConsumerState<ReceiptReviewScreen> createState() =>
@@ -48,6 +54,8 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
       _date = existing.date;
       _type = existing.type;
       _loading = false;
+    } else if (widget.manualEntry || widget.imagePath == null) {
+      _loading = false;
     } else {
       _process();
     }
@@ -75,7 +83,11 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.existingReceipt == null ? 'Review Extraction' : 'Edit Receipt',
+          widget.existingReceipt != null
+              ? 'Edit Receipt'
+              : widget.manualEntry
+              ? 'Add Receipt Manually'
+              : 'Review Extraction',
         ),
       ),
       body: ListView(
@@ -111,10 +123,20 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
                       widget.imagePath != null &&
                           File(widget.imagePath!).existsSync()
                       ? Image.file(File(widget.imagePath!), fit: BoxFit.cover)
-                      : const Icon(
-                          Icons.receipt_long,
-                          size: 58,
-                          color: AppTheme.muted,
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Icon(
+                              Icons.receipt_long,
+                              size: 58,
+                              color: AppTheme.muted,
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Manual entry',
+                              style: TextStyle(color: AppTheme.muted),
+                            ),
+                          ],
                         ),
                 ),
               ],

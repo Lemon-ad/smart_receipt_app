@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/security_provider.dart';
 import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_card.dart';
 import '../widgets/section_header.dart';
+import 'edit_profile_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -12,6 +14,7 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final prefs = ref.watch(preferencesProvider);
+    final security = ref.watch(securityProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -28,34 +31,48 @@ class SettingsScreen extends ConsumerWidget {
                 CircleAvatar(
                   radius: 28,
                   backgroundColor: AppTheme.accent.withValues(alpha: .24),
-                  child: const Text(
-                    'AL',
+                  child: Text(
+                    _initials(security.name ?? 'SR'),
                     style: TextStyle(fontWeight: FontWeight.w900),
                   ),
                 ),
                 const SizedBox(width: 14),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Alya Lim',
+                        security.name ?? 'Secure User',
                         style: TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 18,
                         ),
                       ),
                       Text(
-                        'alya@example.com',
+                        security.email ?? 'No email configured',
                         style: TextStyle(color: AppTheme.muted),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
-                        'Local sync ready · Cloud placeholder',
-                        style: TextStyle(color: AppTheme.green, fontSize: 12),
+                        security.locked
+                            ? 'Vault locked · Local encrypted storage'
+                            : 'Signed in · Local encrypted storage',
+                        style: const TextStyle(
+                          color: AppTheme.green,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
+                ),
+                IconButton(
+                  tooltip: 'Edit profile',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const EditProfileScreen(),
+                    ),
+                  ),
+                  icon: const Icon(Icons.edit_outlined),
                 ),
               ],
             ),
@@ -88,6 +105,46 @@ class SettingsScreen extends ConsumerWidget {
                   onChanged: (value) => ref
                       .read(preferencesProvider.notifier)
                       .save(prefs.copyWith(notificationsEnabled: value)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          const SectionHeader('Security'),
+          const SizedBox(height: 10),
+          AppCard(
+            child: Column(
+              children: [
+                const _SettingTile(
+                  icon: Icons.lock,
+                  title: 'Encrypted local storage',
+                  value: 'Hive AES encryption + secure key storage',
+                ),
+                const _SettingTile(
+                  icon: Icons.password,
+                  title: 'PIN protection',
+                  value: 'Used for fast app unlock after background relock',
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Biometric unlock'),
+                  subtitle: Text(
+                    security.biometricAvailable
+                        ? 'Use fingerprint or Face ID for faster unlock'
+                        : 'Biometric unlock is unavailable on this device',
+                    style: const TextStyle(color: AppTheme.muted),
+                  ),
+                  value: security.biometricEnabled,
+                  onChanged: security.biometricAvailable
+                      ? (value) => ref
+                            .read(securityProvider.notifier)
+                            .setBiometricEnabled(value)
+                      : null,
+                ),
+                const _SettingTile(
+                  icon: Icons.shield_outlined,
+                  title: 'Session protection',
+                  value: 'App relocks when sent to background',
                 ),
               ],
             ),
@@ -130,7 +187,7 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 18),
           OutlinedButton.icon(
-            onPressed: () {},
+            onPressed: () => ref.read(securityProvider.notifier).logout(),
             icon: const Icon(Icons.logout),
             label: const Text('Sign out'),
           ),
@@ -144,6 +201,17 @@ class SettingsScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  String _initials(String value) {
+    final parts = value
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return 'SR';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 }
 

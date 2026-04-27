@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/security_provider.dart';
 import '../models/receipt_archive.dart';
 import '../services/local_storage_service.dart';
 
@@ -13,6 +14,7 @@ class ArchivesNotifier extends Notifier<Map<String, ReceiptArchive>> {
 
   @override
   Map<String, ReceiptArchive> build() {
+    ref.watch(securityProvider.select((state) => state.currentAccountId));
     _storage = ref.read(localStorageProvider);
     return _storage.archiveMap;
   }

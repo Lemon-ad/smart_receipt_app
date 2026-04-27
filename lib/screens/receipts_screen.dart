@@ -9,6 +9,7 @@ import '../widgets/app_card.dart';
 import '../widgets/receipt_tile.dart';
 import '../widgets/section_header.dart';
 import 'receipt_detail_screen.dart';
+import 'receipt_review_screen.dart';
 import 'statement_import_screen.dart';
 
 class ReceiptsScreen extends ConsumerStatefulWidget {
@@ -49,6 +50,16 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
           style: TextStyle(fontWeight: FontWeight.w900),
         ),
         actions: [
+          SoftIconButton(
+            icon: Icons.edit_note,
+            tooltip: 'Add manually',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const ReceiptReviewScreen(manualEntry: true),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           SoftIconButton(
             icon: Icons.upload_file,
             tooltip: 'Import statement',

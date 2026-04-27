@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Smart Receipt AI uses the camera to scan receipts.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Use Face ID to unlock your protected receipt archive.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Smart Receipt AI uses your photo library to import receipt images.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

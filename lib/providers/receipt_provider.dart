@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/archive_provider.dart';
+import '../providers/security_provider.dart';
 import '../models/receipt.dart';
 import '../services/local_storage_service.dart';
 
@@ -13,6 +14,7 @@ class ReceiptsNotifier extends Notifier<List<Receipt>> {
 
   @override
   List<Receipt> build() {
+    ref.watch(securityProvider.select((state) => state.currentAccountId));
     _storage = ref.read(localStorageProvider);
     return _storage.receipts;
   }
