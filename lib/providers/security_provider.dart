@@ -1,7 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'archive_provider.dart';
-import 'receipt_provider.dart';
 import '../services/local_storage_service.dart';
 import '../services/security_service.dart';
 
@@ -270,18 +268,12 @@ class SecurityNotifier extends Notifier<SecurityState> {
       authenticated: false,
       locked: false,
       signupMode: false,
+      currentAccountId: null,
       error: null,
     );
-    _invalidateScopedData();
   }
 
   Future<void> _activateAccount(String accountId) async {
     await _storage.setCurrentAccount(accountId);
-    _invalidateScopedData();
-  }
-
-  void _invalidateScopedData() {
-    ref.invalidate(receiptsProvider);
-    ref.invalidate(archivesProvider);
   }
 }
