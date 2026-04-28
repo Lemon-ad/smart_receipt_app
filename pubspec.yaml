@@ -37,6 +37,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   file_picker: ^10.3.3
   fl_chart: ^1.1.1
+  flutter_dotenv: ^5.2.1
   flutter_riverpod: ^3.0.3
   flutter_edge_detection: ^1.2.0
   flutter_secure_storage: ^9.2.4
@@ -70,6 +71,8 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  assets:
+    - .env
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

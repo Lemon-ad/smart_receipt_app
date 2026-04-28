@@ -16,7 +16,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   late final TextEditingController _name;
   late final TextEditingController _email;
   final _password = TextEditingController();
-  final _pin = TextEditingController();
 
   @override
   void initState() {
@@ -31,7 +30,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _name.dispose();
     _email.dispose();
     _password.dispose();
-    _pin.dispose();
     super.dispose();
   }
 
@@ -53,16 +51,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   label: 'New password (optional)',
                   obscureText: true,
                 ),
-                _Field(
-                  controller: _pin,
-                  label: 'New 4-6 digit PIN (optional)',
-                  keyboardType: TextInputType.number,
-                  obscureText: true,
-                ),
                 const Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    'Leave password and PIN blank if you want to keep the current ones.',
+                    'Leave password blank if you want to keep the current one.',
                     style: TextStyle(color: AppTheme.muted, fontSize: 12),
                   ),
                 ),
@@ -96,11 +88,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       _show('Password must be at least 6 characters.');
       return;
     }
-    final pin = _pin.text.trim();
-    if (pin.isNotEmpty && pin.length < 4) {
-      _show('PIN must be at least 4 digits.');
-      return;
-    }
 
     final ok = await ref
         .read(securityProvider.notifier)
@@ -108,7 +95,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           name: _name.text.trim(),
           email: _email.text.trim(),
           password: _password.text.isEmpty ? null : _password.text,
-          pin: pin.isEmpty ? null : pin,
         );
     if (!mounted || !ok) return;
     Navigator.of(context).pop();
@@ -126,13 +112,11 @@ class _Field extends StatelessWidget {
     required this.controller,
     required this.label,
     this.obscureText = false,
-    this.keyboardType,
   });
 
   final TextEditingController controller;
   final String label;
   final bool obscureText;
-  final TextInputType? keyboardType;
 
   @override
   Widget build(BuildContext context) {
@@ -141,7 +125,6 @@ class _Field extends StatelessWidget {
       child: TextField(
         controller: controller,
         obscureText: obscureText,
-        keyboardType: keyboardType,
         decoration: InputDecoration(labelText: label),
       ),
     );

@@ -17,7 +17,6 @@ class _SetupSecurityScreenState extends ConsumerState<SetupSecurityScreen> {
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
-  final _pin = TextEditingController();
   bool _biometric = false;
 
   @override
@@ -41,8 +40,8 @@ class _SetupSecurityScreenState extends ConsumerState<SetupSecurityScreen> {
             const SizedBox(height: 8),
             Text(
               isAdditionalAccount
-                  ? 'Add a separate local account with its own sign-in, 4-digit unlock PIN, and receipt space.'
-                  : 'Set up local authentication, PIN protection, encrypted storage, and optional biometric unlock.',
+                  ? 'Add a separate local account with its own sign-in and receipt space.'
+                  : 'Set up local authentication, encrypted storage, and optional biometric unlock.',
               style: TextStyle(color: AppTheme.muted),
             ),
             const SizedBox(height: 18),
@@ -55,22 +54,6 @@ class _SetupSecurityScreenState extends ConsumerState<SetupSecurityScreen> {
                     controller: _password,
                     label: 'Password',
                     obscureText: true,
-                  ),
-                  _Field(
-                    controller: _pin,
-                    label: '4-6 digit PIN',
-                    keyboardType: TextInputType.number,
-                    obscureText: true,
-                  ),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Padding(
-                      padding: EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        'Your PIN is for fast app unlock after the app locks in the background. Your password is still used for sign-in.',
-                        style: TextStyle(color: AppTheme.muted, fontSize: 12),
-                      ),
-                    ),
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
@@ -122,17 +105,12 @@ class _SetupSecurityScreenState extends ConsumerState<SetupSecurityScreen> {
       _show('Password must be at least 6 characters.');
       return;
     }
-    if (_pin.text.trim().length < 4) {
-      _show('PIN must be at least 4 digits.');
-      return;
-    }
     await ref
         .read(securityProvider.notifier)
         .completeSetup(
           name: _name.text.trim(),
           email: _email.text.trim(),
           password: _password.text,
-          pin: _pin.text.trim(),
           biometricEnabled: _biometric,
         );
   }
@@ -149,13 +127,11 @@ class _Field extends StatelessWidget {
     required this.controller,
     required this.label,
     this.obscureText = false,
-    this.keyboardType,
   });
 
   final TextEditingController controller;
   final String label;
   final bool obscureText;
-  final TextInputType? keyboardType;
 
   @override
   Widget build(BuildContext context) {
@@ -164,7 +140,6 @@ class _Field extends StatelessWidget {
       child: TextField(
         controller: controller,
         obscureText: obscureText,
-        keyboardType: keyboardType,
         decoration: InputDecoration(labelText: label),
       ),
     );

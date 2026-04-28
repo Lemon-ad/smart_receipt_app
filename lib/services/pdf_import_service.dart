@@ -8,9 +8,14 @@ import '../models/imported_transaction.dart';
 
 class PdfImportService {
   Future<List<ImportedTransaction>> extractTransactions(String path) async {
+    final fileName = path.split(Platform.pathSeparator).last;
+    if (path.toLowerCase().endsWith('.csv')) {
+      final text = await File(path).readAsString();
+      return _parseCsv(text, fileName);
+    }
     final bytes = await File(path).readAsBytes();
     final text = _extractText(bytes);
-    return _parseTransactions(text, path.split(Platform.pathSeparator).last);
+    return _parseTransactions(text, fileName);
   }
 
   String _extractText(Uint8List bytes) {
@@ -70,6 +75,75 @@ class PdfImportService {
         selectedForImport: true,
       ),
     ];
+  }
+
+  List<ImportedTransaction> _parseCsv(String text, String fileName) {
+    final ids = const Uuid();
+    final lines = text
+        .split(RegExp(r'\r?\n'))
+        .where((line) => line.trim().isNotEmpty)
+        .toList();
+    if (lines.isEmpty) return [];
+
+    final rows = lines
+        .map(_splitCsvLine)
+        .where((row) => row.isNotEmpty)
+        .toList();
+    if (rows.isEmpty) return [];
+
+    final header = rows.first.map((cell) => cell.toLowerCase().trim()).toList();
+    final dateIndex = _findHeaderIndex(header, ['date', 'transaction date']);
+    final descIndex = _findHeaderIndex(header, [
+      'description',
+      'merchant',
+      'details',
+      'reference',
+    ]);
+    final amountIndex = _findHeaderIndex(header, ['amount', 'debit', 'total']);
+    final categoryIndex = _findHeaderIndex(header, ['category']);
+    final typeIndex = _findHeaderIndex(header, ['type']);
+
+    final hasHeader = dateIndex != -1 || descIndex != -1 || amountIndex != -1;
+    final startIndex = hasHeader ? 1 : 0;
+    final parsed = <ImportedTransaction>[];
+
+    for (var i = startIndex; i < rows.length; i++) {
+      final row = rows[i];
+      if (row.length < 3) continue;
+      final dateRaw = _valueAt(row, hasHeader ? dateIndex : 0);
+      final descRaw = _valueAt(row, hasHeader ? descIndex : 1);
+      final amountRaw = _valueAt(row, hasHeader ? amountIndex : 2);
+      if (dateRaw.isEmpty || descRaw.isEmpty || amountRaw.isEmpty) continue;
+
+      final amount = _parseAmount(amountRaw);
+      if (amount == 0) continue;
+
+      final description = _cleanDescription(descRaw, 'generic');
+      parsed.add(
+        ImportedTransaction(
+          id: ids.v4(),
+          sourceFileName: fileName,
+          date: _parseDate(dateRaw),
+          description: description,
+          amount: amount,
+          category: categoryIndex == -1
+              ? _categoryFor(description, 'generic')
+              : _valueAt(
+                  row,
+                  categoryIndex,
+                ).ifEmpty(_categoryFor(description, 'generic')),
+          type: typeIndex == -1
+              ? _typeFor(description, 'generic')
+              : _valueAt(
+                  row,
+                  typeIndex,
+                ).ifEmpty(_typeFor(description, 'generic')),
+          selectedForImport: true,
+        ),
+      );
+    }
+
+    return parsed;
   }
 
   _ParsedRow? _parseLine(String line, String sourceHint) {
@@ -275,6 +349,42 @@ class PdfImportService {
     'public_bank' => 'Public Bank statement transaction',
     _ => 'Bank statement transaction',
   };
+
+  int _findHeaderIndex(List<String> header, List<String> candidates) {
+    for (var i = 0; i < header.length; i++) {
+      if (candidates.contains(header[i])) return i;
+    }
+    return -1;
+  }
+
+  String _valueAt(List<String> row, int index) {
+    if (index < 0 || index >= row.length) return '';
+    return row[index].trim();
+  }
+
+  List<String> _splitCsvLine(String line) {
+    final cells = <String>[];
+    final buffer = StringBuffer();
+    var inQuotes = false;
+    for (var i = 0; i < line.length; i++) {
+      final char = line[i];
+      if (char == '"') {
+        if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
+          buffer.write('"');
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char == ',' && !inQuotes) {
+        cells.add(buffer.toString());
+        buffer.clear();
+      } else {
+        buffer.write(char);
+      }
+    }
+    cells.add(buffer.toString());
+    return cells;
+  }
 }
 
 class _ParsedRow {
@@ -287,6 +397,10 @@ class _ParsedRow {
   final DateTime date;
   final String description;
   final double amount;
+}
+
+extension on String {
+  String ifEmpty(String fallback) => trim().isEmpty ? fallback : trim();
 }
 
 final List<RegExp> _tngPatterns = [

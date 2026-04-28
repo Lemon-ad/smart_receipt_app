@@ -11,6 +11,7 @@ class SecurityState {
     required this.locked,
     required this.biometricAvailable,
     required this.biometricEnabled,
+    required this.pinEnabled,
     required this.signupMode,
     required this.accounts,
     this.currentAccountId,
@@ -25,6 +26,7 @@ class SecurityState {
   final bool locked;
   final bool biometricAvailable;
   final bool biometricEnabled;
+  final bool pinEnabled;
   final bool signupMode;
   final List<SecurityProfile> accounts;
   final String? currentAccountId;
@@ -39,6 +41,7 @@ class SecurityState {
     bool? locked,
     bool? biometricAvailable,
     bool? biometricEnabled,
+    bool? pinEnabled,
     bool? signupMode,
     List<SecurityProfile>? accounts,
     Object? currentAccountId = _unset,
@@ -53,6 +56,7 @@ class SecurityState {
       locked: locked ?? this.locked,
       biometricAvailable: biometricAvailable ?? this.biometricAvailable,
       biometricEnabled: biometricEnabled ?? this.biometricEnabled,
+      pinEnabled: pinEnabled ?? this.pinEnabled,
       signupMode: signupMode ?? this.signupMode,
       accounts: accounts ?? this.accounts,
       currentAccountId: currentAccountId == _unset
@@ -71,6 +75,7 @@ class SecurityState {
     locked: false,
     biometricAvailable: false,
     biometricEnabled: false,
+    pinEnabled: false,
     signupMode: false,
     accounts: [],
   );
@@ -107,6 +112,7 @@ class SecurityNotifier extends Notifier<SecurityState> {
       locked: false,
       biometricAvailable: biometricAvailable,
       biometricEnabled: biometricEnabled,
+      pinEnabled: profile?.hasPin ?? false,
       signupMode: !configured,
       accounts: accounts,
       currentAccountId: profile?.id,
@@ -129,7 +135,6 @@ class SecurityNotifier extends Notifier<SecurityState> {
     required String name,
     required String email,
     required String password,
-    required String pin,
     required bool biometricEnabled,
   }) async {
     try {
@@ -137,7 +142,6 @@ class SecurityNotifier extends Notifier<SecurityState> {
         name: name,
         email: email,
         password: password,
-        pin: pin,
         biometricEnabled: biometricEnabled,
       );
       final accounts = await _service.listProfiles();
@@ -147,6 +151,7 @@ class SecurityNotifier extends Notifier<SecurityState> {
         authenticated: true,
         locked: false,
         biometricEnabled: biometricEnabled,
+        pinEnabled: profile.hasPin,
         signupMode: false,
         accounts: accounts,
         currentAccountId: profile.id,
@@ -176,6 +181,7 @@ class SecurityNotifier extends Notifier<SecurityState> {
       name: profile.name,
       email: profile.email,
       biometricEnabled: profile.biometricEnabled,
+      pinEnabled: profile.hasPin,
       error: null,
     );
     return true;
@@ -194,6 +200,7 @@ class SecurityNotifier extends Notifier<SecurityState> {
       currentAccountId: profile.id,
       name: profile.name,
       email: profile.email,
+      pinEnabled: profile.hasPin,
       error: null,
     );
     return true;
@@ -208,6 +215,16 @@ class SecurityNotifier extends Notifier<SecurityState> {
     final ok = await _service.validatePin(pin);
     if (!ok) {
       state = state.copyWith(error: 'Incorrect PIN.');
+      return false;
+    }
+    state = state.copyWith(locked: false, error: null);
+    return true;
+  }
+
+  Future<bool> unlockWithPassword(String password) async {
+    final ok = await _service.validateCurrentPassword(password);
+    if (!ok) {
+      state = state.copyWith(error: 'Incorrect password.');
       return false;
     }
     state = state.copyWith(locked: false, error: null);
@@ -236,14 +253,12 @@ class SecurityNotifier extends Notifier<SecurityState> {
     required String name,
     required String email,
     String? password,
-    String? pin,
   }) async {
     try {
       final profile = await _service.updateCurrentProfile(
         name: name,
         email: email,
         password: password,
-        pin: pin,
         biometricEnabled: state.biometricEnabled,
       );
       final accounts = await _service.listProfiles();
@@ -252,6 +267,7 @@ class SecurityNotifier extends Notifier<SecurityState> {
         currentAccountId: profile.id,
         name: profile.name,
         email: profile.email,
+        pinEnabled: profile.hasPin,
         error: null,
       );
       return true;

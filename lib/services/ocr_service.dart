@@ -1,17 +1,29 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
 class OcrService {
   Future<String> extractText(String imagePath) async {
     try {
-      if (!File(imagePath).existsSync()) return _fallbackText;
+      if (!File(imagePath).existsSync()) {
+        debugPrint(
+          '[OCR] Image not found. Using fallback text. path=$imagePath',
+        );
+        return _fallbackText;
+      }
       final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
       final input = InputImage.fromFilePath(imagePath);
       final result = await recognizer.processImage(input);
       await recognizer.close();
-      return result.text.trim().isEmpty ? _fallbackText : result.text.trim();
-    } catch (_) {
+      if (result.text.trim().isEmpty) {
+        debugPrint('[OCR] OCR returned empty text. Using fallback text.');
+        return _fallbackText;
+      }
+      debugPrint('[OCR] OCR success. textLength=${result.text.trim().length}');
+      return result.text.trim();
+    } catch (error) {
+      debugPrint('[OCR] OCR error. Using fallback text. error=$error');
       return _fallbackText;
     }
   }

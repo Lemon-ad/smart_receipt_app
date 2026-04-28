@@ -18,12 +18,14 @@ class SecurityProfile {
     required this.name,
     required this.email,
     required this.biometricEnabled,
+    required this.hasPin,
   });
 
   final String id;
   final String name;
   final String email;
   final bool biometricEnabled;
+  final bool hasPin;
 }
 
 class _SecurityAccount {
@@ -40,7 +42,7 @@ class _SecurityAccount {
   final String name;
   final String email;
   final String passwordHash;
-  final String pinHash;
+  final String? pinHash;
   final bool biometricEnabled;
 
   factory _SecurityAccount.fromJson(Map<String, dynamic> json) {
@@ -49,7 +51,7 @@ class _SecurityAccount {
       name: json['name'] as String,
       email: json['email'] as String,
       passwordHash: json['passwordHash'] as String,
-      pinHash: json['pinHash'] as String,
+      pinHash: json['pinHash'] as String?,
       biometricEnabled: json['biometricEnabled'] as bool? ?? false,
     );
   }
@@ -71,6 +73,7 @@ class _SecurityAccount {
       name: name,
       email: email,
       biometricEnabled: biometricEnabled,
+      hasPin: pinHash != null && pinHash!.isNotEmpty,
     );
   }
 
@@ -135,7 +138,7 @@ class SecurityService {
     required String name,
     required String email,
     required String password,
-    required String pin,
+    String? pin,
     required bool biometricEnabled,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
@@ -149,7 +152,7 @@ class SecurityService {
       name: name.trim(),
       email: normalizedEmail,
       passwordHash: _hash(password),
-      pinHash: _hash(pin),
+      pinHash: pin == null || pin.isEmpty ? null : _hash(pin),
       biometricEnabled: biometricEnabled,
     );
     accounts.add(account);
@@ -212,8 +215,14 @@ class SecurityService {
 
   Future<bool> validatePin(String pin) async {
     final current = await _loadCurrentAccount();
-    if (current == null) return false;
+    if (current == null || current.pinHash == null) return false;
     return current.pinHash == _hash(pin);
+  }
+
+  Future<bool> validateCurrentPassword(String password) async {
+    final current = await _loadCurrentAccount();
+    if (current == null) return false;
+    return current.passwordHash == _hash(password);
   }
 
   Future<bool> canUseBiometrics() async {

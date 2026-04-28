@@ -54,9 +54,7 @@ class SettingsScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        security.locked
-                            ? 'Vault locked · Local encrypted storage'
-                            : 'Signed in · Local encrypted storage',
+                        'Signed in · Local encrypted storage',
                         style: const TextStyle(
                           color: AppTheme.green,
                           fontSize: 12,
@@ -122,8 +120,8 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 const _SettingTile(
                   icon: Icons.password,
-                  title: 'PIN protection',
-                  value: 'Used for fast app unlock after background relock',
+                  title: 'Password protection',
+                  value: 'Used when the app relocks in the background',
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -144,7 +142,7 @@ class SettingsScreen extends ConsumerWidget {
                 const _SettingTile(
                   icon: Icons.shield_outlined,
                   title: 'Session protection',
-                  value: 'App relocks when sent to background',
+                  value: 'Password-protected sign-in with local encrypted storage',
                 ),
               ],
             ),

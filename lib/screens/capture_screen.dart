@@ -230,18 +230,25 @@ class _CaptureScreenState extends State<CaptureScreen> {
     });
     try {
       final savePath = await _nextScanPath();
+      debugPrint('[Capture] Starting scan. targetPath=$savePath');
       final success = await scanner(savePath);
+      debugPrint('[Capture] Scan finished. success=$success path=$savePath');
       if (!mounted) return;
       if (success) {
+        debugPrint('[Capture] Opening review screen for $savePath');
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => ReceiptReviewScreen(imagePath: savePath),
           ),
         );
+      } else {
+        debugPrint('[Capture] Scan returned false; review screen not opened.');
       }
     } on EdgeDetectionException catch (error) {
+      debugPrint('[Capture] EdgeDetectionException: ${error.message}');
       _error = error.message;
     } catch (error) {
+      debugPrint('[Capture] Scanner error: $error');
       _error = 'Unable to start the document scanner.';
     }
     if (mounted) {

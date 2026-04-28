@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/receipt.dart';
@@ -23,17 +25,28 @@ class ParsedReceipt {
 }
 
 class LlmService {
-  LlmService({
-    this.apiKey = const String.fromEnvironment('OPENROUTER_API_KEY'),
-    this.model = 'openai/gpt-4.1-mini',
-  });
+  LlmService({String? apiKey, String? model})
+    : apiKey =
+          apiKey ??
+          dotenv.env['OPENROUTER_API_KEY'] ??
+          const String.fromEnvironment('OPENROUTER_API_KEY'),
+      model =
+          model ??
+          dotenv.env['OPENROUTER_MODEL'] ??
+          '~google/gemini-flash-latest';
 
   final String apiKey;
   final String model;
 
   Future<ParsedReceipt> parseReceipt(String ocrText) async {
-    if (apiKey.isEmpty) return _localHeuristicParse(ocrText);
+    if (apiKey.isEmpty) {
+      debugPrint('[LLM] No API key configured. Using local heuristic parse.');
+      return _localHeuristicParse(ocrText);
+    }
     try {
+      debugPrint(
+        '[LLM] Sending OCR text to OpenRouter. model=$model textLength=${ocrText.length}',
+      );
       final response = await http.post(
         Uri.parse('https://openrouter.ai/api/v1/chat/completions'),
         headers: {
@@ -53,19 +66,30 @@ class LlmService {
             {'role': 'user', 'content': ocrText},
           ],
           'temperature': 0.1,
+          'response_format': {'type': 'json_object'},
         }),
       );
+      debugPrint('[LLM] OpenRouter response status=${response.statusCode}');
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        debugPrint(
+          '[LLM] Non-success status. Falling back to local heuristic parse. body=${response.body}',
+        );
         return _localHeuristicParse(ocrText);
       }
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       final content =
           body['choices']?[0]?['message']?['content']?.toString() ?? '{}';
+      debugPrint(
+        '[LLM] OpenRouter parse success. contentLength=${content.length}',
+      );
       return _fromJson(
         jsonDecode(_jsonOnly(content)) as Map<String, dynamic>,
         ocrText,
       );
-    } catch (_) {
+    } catch (error) {
+      debugPrint(
+        '[LLM] Parse error. Falling back to local heuristic. error=$error',
+      );
       return _localHeuristicParse(ocrText);
     }
   }
@@ -102,6 +126,7 @@ class LlmService {
   }
 
   ParsedReceipt _localHeuristicParse(String text) {
+    debugPrint('[LLM] Using local heuristic parse.');
     final lines = text
         .split(RegExp(r'\r?\n'))
         .where((line) => line.trim().isNotEmpty)

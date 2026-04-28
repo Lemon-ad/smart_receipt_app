@@ -25,10 +25,10 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
   bool _loading = false;
   String? _fileName;
 
-  Future<void> _pickPdf() async {
+  Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['pdf'],
+      allowedExtensions: ['pdf', 'csv'],
     );
     if (result == null || result.files.single.path == null) return;
     setState(() {
@@ -109,21 +109,21 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Bank or TNG eWallet PDF',
+                  'Bank or TNG eWallet PDF / CSV',
                   style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   _fileName == null
-                      ? 'Extracts PDF text, detects TNG or local bank transaction rows, and lets you confirm entries before adding them as expenses.'
-                      : 'Detected parser: ${_sourceLabel(_fileName!)}',
+                      ? 'Imports PDF statements or CSV exports, detects TNG or local bank transaction rows, and lets you confirm entries before adding them as expenses.'
+                      : 'Detected source: ${_sourceLabel(_fileName!)} · ${_formatLabel(_fileName!)}',
                   style: const TextStyle(color: AppTheme.muted),
                 ),
                 const SizedBox(height: 14),
                 OutlinedButton.icon(
-                  onPressed: _loading ? null : _pickPdf,
-                  icon: const Icon(Icons.picture_as_pdf),
-                  label: Text(_fileName ?? 'Choose PDF'),
+                  onPressed: _loading ? null : _pickFile,
+                  icon: const Icon(Icons.upload_file),
+                  label: Text(_fileName ?? 'Choose PDF or CSV'),
                 ),
               ],
             ),
@@ -239,5 +239,11 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
     if (lower.contains('cimb')) return 'CIMB';
     if (lower.contains('public')) return 'Public Bank';
     return 'Bank Statement';
+  }
+
+  String _formatLabel(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.csv')) return 'CSV import';
+    return 'PDF import';
   }
 }

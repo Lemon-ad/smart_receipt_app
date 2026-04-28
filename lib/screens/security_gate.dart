@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/security_provider.dart';
 import 'app_shell.dart';
 import 'login_screen.dart';
-import 'lock_screen.dart';
 import 'setup_security_screen.dart';
 
 class SecurityGate extends ConsumerStatefulWidget {
@@ -14,27 +13,11 @@ class SecurityGate extends ConsumerStatefulWidget {
   ConsumerState<SecurityGate> createState() => _SecurityGateState();
 }
 
-class _SecurityGateState extends ConsumerState<SecurityGate>
-    with WidgetsBindingObserver {
+class _SecurityGateState extends ConsumerState<SecurityGate> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     Future.microtask(() => ref.read(securityProvider.notifier).initialize());
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused) {
-      ref.read(securityProvider.notifier).lock();
-    }
   }
 
   @override
@@ -51,9 +34,6 @@ class _SecurityGateState extends ConsumerState<SecurityGate>
     }
     if (!security.authenticated) {
       return const LoginScreen();
-    }
-    if (security.locked) {
-      return const LockScreen();
     }
     return const AppShell();
   }

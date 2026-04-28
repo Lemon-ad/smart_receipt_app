@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
 import 'package:path/path.dart' as p;
@@ -75,14 +75,21 @@ class LocalStorageService {
 
   Future<void> setCurrentAccount(String? accountId) async {
     _currentAccountId = accountId;
+    debugPrint('[Storage] Current account set to $_currentAccountId');
     if (accountId != null) {
       await _claimUnownedReceipts(accountId);
       await _seedAccountIfEmpty(accountId);
+      debugPrint(
+        '[Storage] Account ready. visibleReceipts=${receipts.length} accountId=$accountId',
+      );
     }
   }
 
   Future<void> upsertReceipt(Receipt receipt) async {
     final ownerId = _ownerships.get(receipt.id) ?? _currentAccountId;
+    debugPrint(
+      '[Storage] upsertReceipt start id=${receipt.id} ownerId=$ownerId currentAccount=$_currentAccountId merchant=${receipt.merchantName}',
+    );
     if (ownerId == null) {
       throw StateError('No signed-in account found for this receipt.');
     }
@@ -122,6 +129,9 @@ class LocalStorageService {
         lastVerifiedAt: archive?.lastVerifiedAt,
         linkedStatementRefs: archive?.linkedStatementRefs ?? const [],
       ),
+    );
+    debugPrint(
+      '[Storage] upsertReceipt success id=${normalizedReceipt.id} ownerId=$ownerId visibleReceipts=${receipts.length}',
     );
   }
 

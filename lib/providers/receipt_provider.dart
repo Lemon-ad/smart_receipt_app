@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 
 import '../providers/archive_provider.dart';
 import '../providers/security_provider.dart';
@@ -22,12 +23,18 @@ class ReceiptsNotifier extends Notifier<List<Receipt>> {
   Future<void> save(Receipt receipt) async {
     await _storage.upsertReceipt(receipt);
     state = _storage.receipts;
+    debugPrint(
+      '[ReceiptsProvider] Saved receipt id=${receipt.id}. visibleCount=${state.length}',
+    );
     ref.invalidate(archivesProvider);
   }
 
   Future<void> remove(String id) async {
     await _storage.deleteReceipt(id);
     state = _storage.receipts;
+    debugPrint(
+      '[ReceiptsProvider] Removed receipt id=$id. visibleCount=${state.length}',
+    );
     ref.invalidate(archivesProvider);
   }
 }

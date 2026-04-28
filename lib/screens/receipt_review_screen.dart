@@ -43,6 +43,9 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint(
+      '[Review] initState existing=${widget.existingReceipt != null} manual=${widget.manualEntry} imagePath=${widget.imagePath}',
+    );
     final existing = widget.existingReceipt;
     if (existing != null) {
       _merchant.text = existing.merchantName;
@@ -64,8 +67,13 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
   Future<void> _process() async {
     setState(() => _loading = true);
     try {
+      debugPrint('[Review] Starting OCR for imagePath=${widget.imagePath}');
       final raw = await OcrService().extractText(widget.imagePath ?? '');
+      debugPrint('[Review] OCR complete. rawLength=${raw.length}');
       final parsed = await LlmService().parseReceipt(raw);
+      debugPrint(
+        '[Review] Parse complete. merchant=${parsed.merchantName} amount=${parsed.totalAmount} category=${parsed.category}',
+      );
       _raw.text = raw;
       _merchant.text = parsed.merchantName;
       _amount.text = parsed.totalAmount.toStringAsFixed(2);
@@ -73,6 +81,7 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
       _payment.text = parsed.paymentMethod;
       _date = parsed.date;
     } catch (error) {
+      debugPrint('[Review] Extraction failed: $error');
       _error = 'Extraction failed. You can still enter the fields manually.';
     }
     if (mounted) setState(() => _loading = false);
@@ -230,7 +239,21 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
       updatedAt: now,
       items: existing?.items ?? const [],
     );
-    await ref.read(receiptsProvider.notifier).save(receipt);
+    debugPrint(
+      '[Review] Saving receipt id=${receipt.id} merchant=${receipt.merchantName} amount=${receipt.totalAmount} source=${receipt.sourceType}',
+    );
+    try {
+      await ref.read(receiptsProvider.notifier).save(receipt);
+      debugPrint('[Review] Save success for receipt id=${receipt.id}');
+    } catch (error) {
+      debugPrint('[Review] Save failed for receipt id=${receipt.id}: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to save receipt: $error')),
+        );
+      }
+      return;
+    }
     if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
   }
 }
