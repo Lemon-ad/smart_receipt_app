@@ -22,13 +22,25 @@ class ReceiptsScreen extends ConsumerStatefulWidget {
 class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
   String _query = '';
   String _chip = 'All';
+  String _summaryPeriod = 'Monthly';
   final _chips = const ['All', 'Personal', 'Business', 'This Month', 'Travel'];
+  final _summaryPeriods = const ['Weekly', 'Monthly', 'Yearly'];
 
   @override
   Widget build(BuildContext context) {
     final receipts = ref.watch(receiptsProvider);
     final filtered = _applyFilters(receipts);
     final now = DateTime.now();
+    final startOfWeek = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
+    final startOfNextWeek = startOfWeek.add(const Duration(days: 7));
+    final startOfLastWeek = startOfWeek.subtract(const Duration(days: 7));
+    final startOfYear = DateTime(now.year);
+    final startOfNextYear = DateTime(now.year + 1);
+    final startOfLastYear = DateTime(now.year - 1);
     final thisMonth = receipts
         .where((r) => r.date.year == now.year && r.date.month == now.month)
         .toList();
@@ -39,9 +51,78 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
               r.date.month == DateTime(now.year, now.month - 1).month,
         )
         .toList();
+    final thisWeek = receipts
+        .where(
+          (r) =>
+              !r.date.isBefore(startOfWeek) && r.date.isBefore(startOfNextWeek),
+        )
+        .toList();
+    final lastWeek = receipts
+        .where(
+          (r) =>
+              !r.date.isBefore(startOfLastWeek) && r.date.isBefore(startOfWeek),
+        )
+        .toList();
     final total = thisMonth.fold<double>(0, (sum, r) => sum + r.totalAmount);
     final previous = lastMonth.fold<double>(0, (sum, r) => sum + r.totalAmount);
+    final weeklyTotal = thisWeek.fold<double>(
+      0,
+      (sum, r) => sum + r.totalAmount,
+    );
+    final previousWeek = lastWeek.fold<double>(
+      0,
+      (sum, r) => sum + r.totalAmount,
+    );
+    final thisYear = receipts
+        .where(
+          (r) =>
+              !r.date.isBefore(startOfYear) && r.date.isBefore(startOfNextYear),
+        )
+        .toList();
+    final lastYear = receipts
+        .where(
+          (r) =>
+              !r.date.isBefore(startOfLastYear) && r.date.isBefore(startOfYear),
+        )
+        .toList();
+    final yearlyTotal = thisYear.fold<double>(
+      0,
+      (sum, r) => sum + r.totalAmount,
+    );
+    final previousYear = lastYear.fold<double>(
+      0,
+      (sum, r) => sum + r.totalAmount,
+    );
     final diff = previous == 0 ? 100 : ((total - previous) / previous) * 100;
+    final weeklyDiff = previousWeek == 0
+        ? 100
+        : ((weeklyTotal - previousWeek) / previousWeek) * 100;
+    final yearlyDiff = previousYear == 0
+        ? 100
+        : ((yearlyTotal - previousYear) / previousYear) * 100;
+    final summary = switch (_summaryPeriod) {
+      'Weekly' => (
+        title: 'Weekly spending',
+        amount: weeklyTotal,
+        diff: weeklyDiff,
+        compareLabel: 'vs last week',
+        count: thisWeek.length,
+      ),
+      'Yearly' => (
+        title: 'Yearly spending',
+        amount: yearlyTotal,
+        diff: yearlyDiff,
+        compareLabel: 'vs last year',
+        count: thisYear.length,
+      ),
+      _ => (
+        title: 'Monthly spending',
+        amount: total,
+        diff: diff,
+        compareLabel: 'vs last month',
+        count: thisMonth.length,
+      ),
+    };
 
     return Scaffold(
       appBar: AppBar(
@@ -81,34 +162,37 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Monthly spending',
-                  style: TextStyle(color: AppTheme.muted),
+          _SummaryCard(
+            title: summary.title,
+            amount: money(summary.amount),
+            primaryMetricLabel: summary.compareLabel,
+            primaryMetricValue:
+                '${summary.diff >= 0 ? '+' : ''}${summary.diff.toStringAsFixed(1)}%',
+            secondaryMetricLabel: 'receipts',
+            secondaryMetricValue: '${summary.count}',
+            trailing: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _summaryPeriod,
+                dropdownColor: AppTheme.panel2,
+                borderRadius: BorderRadius.circular(12),
+                style: const TextStyle(
+                  color: AppTheme.text,
+                  fontWeight: FontWeight.w700,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  money(total),
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    _Metric(
-                      label: 'vs last month',
-                      value:
-                          '${diff >= 0 ? '+' : ''}${diff.toStringAsFixed(1)}%',
-                    ),
-                    const SizedBox(width: 12),
-                    _Metric(label: 'receipts', value: '${thisMonth.length}'),
-                  ],
-                ),
-              ],
+                iconEnabledColor: AppTheme.muted,
+                items: _summaryPeriods
+                    .map(
+                      (period) => DropdownMenuItem<String>(
+                        value: period,
+                        child: Text(period),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _summaryPeriod = value);
+                },
+              ),
             ),
           ),
           const SizedBox(height: 18),
@@ -203,6 +287,63 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
       grouped.putIfAbsent(shortDate(receipt.date), () => []).add(receipt);
     }
     return grouped;
+  }
+}
+
+class _SummaryCard extends StatelessWidget {
+  const _SummaryCard({
+    required this.title,
+    required this.amount,
+    required this.primaryMetricLabel,
+    required this.primaryMetricValue,
+    required this.secondaryMetricLabel,
+    required this.secondaryMetricValue,
+    this.trailing,
+  });
+
+  final String title;
+  final String amount;
+  final String primaryMetricLabel;
+  final String primaryMetricValue;
+  final String secondaryMetricLabel;
+  final String secondaryMetricValue;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(color: AppTheme.muted),
+                ),
+              ),
+              if (trailing != null) ...[trailing!],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            amount,
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              _Metric(label: primaryMetricLabel, value: primaryMetricValue),
+              const SizedBox(width: 12),
+              _Metric(label: secondaryMetricLabel, value: secondaryMetricValue),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 

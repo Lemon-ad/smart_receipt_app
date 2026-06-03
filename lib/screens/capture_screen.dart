@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_edge_detection/flutter_edge_detection.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../theme/app_theme.dart';
 import '../widgets/app_card.dart';
@@ -200,6 +201,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
   }
 
   Future<void> _scanWithEdgeDetection() async {
+    final allowed = await _ensureCameraPermission();
+    if (!allowed) return;
     await _runScan(
       (path) => FlutterEdgeDetection.detectEdge(
         path,
@@ -254,6 +257,31 @@ class _CaptureScreenState extends State<CaptureScreen> {
     if (mounted) {
       setState(() => _processing = false);
     }
+  }
+
+  Future<bool> _ensureCameraPermission() async {
+    final status = await Permission.camera.status;
+    if (status.isGranted) {
+      debugPrint('[Capture] Camera permission already granted.');
+      return true;
+    }
+
+    final requested = await Permission.camera.request();
+    debugPrint('[Capture] Camera permission request result=$requested');
+    if (requested.isGranted) return true;
+
+    if (!mounted) return false;
+    final message = requested.isPermanentlyDenied
+        ? 'Camera permission is blocked. Open app settings and allow Camera to scan receipts.'
+        : 'Camera permission is required for live receipt scanning.';
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+
+    if (requested.isPermanentlyDenied) {
+      await openAppSettings();
+    }
+    return false;
   }
 
   Future<String> _nextScanPath() async {
