@@ -284,7 +284,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
   Map<String, List<Receipt>> _grouped(List<Receipt> receipts) {
     final grouped = <String, List<Receipt>>{};
     for (final receipt in receipts) {
-      grouped.putIfAbsent(shortDate(receipt.date), () => []).add(receipt);
+      grouped.putIfAbsent(monthLabel(receipt.date), () => []).add(receipt);
     }
     return grouped;
   }

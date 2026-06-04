@@ -18,10 +18,10 @@ class ExportService {
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/smart_receipt_export.csv');
     final rows = [
-      'Date,Merchant,Category,Type,Payment,Amount,Locked,Archived At,SHA256',
+      'Date,Merchant,Category,Type,Payment,Amount,Locked,Archived At,Last Verified,SHA256',
       ...receipts.map((r) {
         final archive = archives[r.id];
-        return '${DateFormat('yyyy-MM-dd').format(r.date)},"${r.merchantName}",${r.category},${r.type},${r.paymentMethod},${r.totalAmount.toStringAsFixed(2)},${archive?.isLocked ?? false},${archive?.archivedAt.toIso8601String() ?? ''},${archive?.sha256Hash ?? ''}';
+        return '${DateFormat('yyyy-MM-dd').format(r.date)},"${r.merchantName}",${r.category},${r.type},${r.paymentMethod},${r.totalAmount.toStringAsFixed(2)},${archive?.isLocked ?? false},${archive?.archivedAt.toIso8601String() ?? ''},${archive?.lastVerifiedAt?.toIso8601String() ?? ''},${archive?.sha256Hash ?? ''}';
       }),
     ];
     await file.writeAsString(rows.join('\n'));
@@ -65,9 +65,7 @@ class ExportService {
                 r.type,
                 _money.format(r.totalAmount),
                 archive?.isLocked == true ? 'Yes' : 'No',
-                archive == null
-                    ? '-'
-                    : '${archive.sha256Hash.substring(0, 10)}...',
+                archive == null ? '-' : archive.sha256Hash,
               ];
             }).toList(),
           ),

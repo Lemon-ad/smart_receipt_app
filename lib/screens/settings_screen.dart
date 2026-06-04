@@ -6,6 +6,7 @@ import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_card.dart';
 import '../widgets/section_header.dart';
+import 'archive_screen.dart';
 import 'edit_profile_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -170,6 +171,14 @@ class SettingsScreen extends ConsumerWidget {
                       .read(preferencesProvider.notifier)
                       .save(prefs.copyWith(cloudSyncEnabled: value)),
                 ),
+                _SettingTile(
+                  icon: Icons.archive_outlined,
+                  title: 'Tax archive',
+                  value: 'View locked receipts and verify hashes',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ArchiveScreen()),
+                  ),
+                ),
                 const _SettingTile(
                   icon: Icons.file_download_outlined,
                   title: 'Export all data',
@@ -218,10 +227,12 @@ class _SettingTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.value,
+    this.onTap,
   });
   final IconData icon;
   final String title;
   final String value;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -231,6 +242,7 @@ class _SettingTile extends StatelessWidget {
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
       subtitle: Text(value, style: const TextStyle(color: AppTheme.muted)),
       trailing: const Icon(Icons.chevron_right),
+      onTap: onTap,
     );
   }
 }

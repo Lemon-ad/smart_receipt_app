@@ -495,6 +495,13 @@ class LocalStorageService {
       ..writeln(receipt.paymentMethod)
       ..writeln(receipt.tags.join(','))
       ..writeln(receipt.rawOcrText);
+    for (final item in receipt.items) {
+      content
+        ..writeln(item.name)
+        ..writeln(item.quantity.toStringAsFixed(2))
+        ..writeln(item.unitPrice.toStringAsFixed(2))
+        ..writeln(item.totalPrice.toStringAsFixed(2));
+    }
 
     final bytes = <int>[...utf8.encode(content.toString())];
     if (archivedImagePath != null && File(archivedImagePath).existsSync()) {
