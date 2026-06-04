@@ -9,6 +9,7 @@ import '../providers/receipt_provider.dart';
 import '../services/llm_service.dart';
 import '../services/ocr_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/formatters.dart';
 import '../widgets/app_card.dart';
 
 class ReceiptReviewScreen extends ConsumerStatefulWidget {
@@ -37,6 +38,7 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
   final _raw = TextEditingController();
   DateTime _date = DateTime.now();
   String _type = 'Personal';
+  final List<ReceiptItem> _items = [];
   bool _loading = true;
   String? _error;
 
@@ -56,6 +58,7 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
       _raw.text = existing.rawOcrText;
       _date = existing.date;
       _type = existing.type;
+      _items.addAll(existing.items);
       _loading = false;
     } else if (widget.manualEntry || widget.imagePath == null) {
       _loading = false;
@@ -80,6 +83,9 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
       _category.text = parsed.category;
       _payment.text = parsed.paymentMethod;
       _date = parsed.date;
+      _items
+        ..clear()
+        ..addAll(parsed.items);
     } catch (error) {
       debugPrint('[Review] Extraction failed: $error');
       _error = 'Extraction failed. You can still enter the fields manually.';
@@ -199,6 +205,8 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
           _Field(controller: _tags, label: 'Tags, comma separated'),
           _Field(controller: _raw, label: 'Raw OCR text', maxLines: 6),
           const SizedBox(height: 12),
+          _buildItemsCard(),
+          const SizedBox(height: 12),
           ElevatedButton.icon(
             onPressed: _loading ? null : _save,
             icon: const Icon(Icons.save),
@@ -237,7 +245,7 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
       sourceType: existing?.sourceType ?? 'receipt',
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
-      items: existing?.items ?? const [],
+      items: List.unmodifiable(_items),
     );
     debugPrint(
       '[Review] Saving receipt id=${receipt.id} merchant=${receipt.merchantName} amount=${receipt.totalAmount} source=${receipt.sourceType}',
@@ -255,6 +263,201 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
       return;
     }
     if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  Widget _buildItemsCard() {
+    final calculated = _items.fold(0.0, (sum, i) => sum + i.totalPrice);
+    final entered = double.tryParse(_amount.text.trim()) ?? 0;
+    final matches = (calculated - entered).abs() < 0.01;
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Items',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              Text(
+                '${_items.length} item${_items.length == 1 ? '' : 's'}',
+                style: const TextStyle(color: AppTheme.muted),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_items.isEmpty)
+            const Text(
+              'No line items. Tap + to add.',
+              style: TextStyle(color: AppTheme.muted),
+            )
+          else
+            ..._items.asMap().entries.map((entry) {
+              final index = entry.key;
+              final item = entry.value;
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: Text(item.name),
+                subtitle: Text(
+                  '${item.quantity == item.quantity.truncateToDouble() ? item.quantity.toStringAsFixed(0) : item.quantity.toStringAsFixed(2)}x @ ${money(item.unitPrice)} = ${money(item.totalPrice)}',
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit, size: 18),
+                      onPressed: () => _editItem(index),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete,
+                        size: 18,
+                        color: AppTheme.rose,
+                      ),
+                      onPressed: () => setState(() => _items.removeAt(index)),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          if (_items.isNotEmpty) ...[
+            const Divider(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Calculated total'),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      money(calculated),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: matches ? AppTheme.green : AppTheme.rose,
+                      ),
+                    ),
+                    if (!matches)
+                      IconButton(
+                        icon: const Icon(Icons.sync, size: 18),
+                        tooltip: 'Sync total from items',
+                        onPressed: () => setState(
+                          () => _amount.text = calculated.toStringAsFixed(2),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _addItem,
+            icon: const Icon(Icons.add),
+            label: const Text('Add item'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addItem() async {
+    final item = await showDialog<ReceiptItem>(
+      context: context,
+      builder: (_) => const _ItemDialog(),
+    );
+    if (item != null) setState(() => _items.add(item));
+  }
+
+  Future<void> _editItem(int index) async {
+    final item = await showDialog<ReceiptItem>(
+      context: context,
+      builder: (_) => _ItemDialog(item: _items[index]),
+    );
+    if (item != null) setState(() => _items[index] = item);
+  }
+}
+
+class _ItemDialog extends StatefulWidget {
+  const _ItemDialog({this.item});
+  final ReceiptItem? item;
+
+  @override
+  State<_ItemDialog> createState() => _ItemDialogState();
+}
+
+class _ItemDialogState extends State<_ItemDialog> {
+  final _name = TextEditingController();
+  final _quantity = TextEditingController();
+  final _unitPrice = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.item != null) {
+      _name.text = widget.item!.name;
+      _quantity.text = widget.item!.quantity.toString();
+      _unitPrice.text = widget.item!.unitPrice.toStringAsFixed(2);
+    } else {
+      _quantity.text = '1';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.item == null ? 'Add Item' : 'Edit Item'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _name,
+            decoration: const InputDecoration(labelText: 'Item name'),
+          ),
+          TextField(
+            controller: _quantity,
+            decoration: const InputDecoration(labelText: 'Quantity'),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          ),
+          TextField(
+            controller: _unitPrice,
+            decoration: const InputDecoration(labelText: 'Unit price (RM)'),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () {
+            final quantity = double.tryParse(_quantity.text) ?? 1;
+            final unitPrice = double.tryParse(_unitPrice.text) ?? 0;
+            Navigator.pop(
+              context,
+              ReceiptItem(
+                name: _name.text.trim().isEmpty ? 'Item' : _name.text.trim(),
+                quantity: quantity,
+                unitPrice: unitPrice,
+                totalPrice: quantity * unitPrice,
+              ),
+            );
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _quantity.dispose();
+    _unitPrice.dispose();
+    super.dispose();
   }
 }
 

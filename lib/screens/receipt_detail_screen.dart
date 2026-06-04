@@ -55,6 +55,54 @@ class ReceiptDetailScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 14),
+          if (receipt.items.isNotEmpty)
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Items',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 8),
+                  ...receipt.items.map(
+                    (item) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${item.quantity == item.quantity.truncateToDouble() ? item.quantity.toStringAsFixed(0) : item.quantity.toStringAsFixed(2)}x ${item.name}',
+                            ),
+                          ),
+                          Text(
+                            money(item.totalPrice),
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Divider(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Total'),
+                      Text(
+                        money(
+                          receipt.items.fold(
+                            0.0,
+                            (sum, i) => sum + i.totalPrice,
+                          ),
+                        ),
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          if (receipt.items.isNotEmpty) const SizedBox(height: 14),
           AppCard(
             child: Column(
               children: [
