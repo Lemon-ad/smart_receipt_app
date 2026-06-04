@@ -112,7 +112,7 @@ class LocalStorageService {
     final normalizedReceipt = receipt.copyWith(
       imagePath: archivedImagePath ?? receipt.imagePath,
     );
-    final hash = await _computeReceiptHash(
+    final hash = await computeReceiptHash(
       normalizedReceipt,
       archivedImagePath,
     );
@@ -166,7 +166,7 @@ class LocalStorageService {
       receipt.imagePath,
       archive?.archivedImagePath,
     );
-    final hash = await _computeReceiptHash(receipt, archivedImagePath);
+    final hash = await computeReceiptHash(receipt, archivedImagePath);
     await _archives.put(
       receiptId,
       ReceiptArchive(
@@ -186,7 +186,7 @@ class LocalStorageService {
     final receipt = _receipts.get(receiptId);
     final archive = _archives.get(receiptId);
     if (receipt == null || archive == null) return false;
-    final latestHash = await _computeReceiptHash(
+    final latestHash = await computeReceiptHash(
       receipt,
       archive.archivedImagePath,
     );
@@ -480,7 +480,8 @@ class LocalStorageService {
     return targetPath;
   }
 
-  Future<String> _computeReceiptHash(
+  @visibleForTesting
+  Future<String> computeReceiptHash(
     Receipt receipt,
     String? archivedImagePath,
   ) async {
@@ -521,7 +522,7 @@ class LocalStorageService {
       final normalizedReceipt = receipt.copyWith(
         imagePath: archivedImagePath ?? receipt.imagePath,
       );
-      final hash = await _computeReceiptHash(
+      final hash = await computeReceiptHash(
         normalizedReceipt,
         archivedImagePath,
       );

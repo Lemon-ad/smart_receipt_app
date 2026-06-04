@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:meta/meta.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:uuid/uuid.dart';
 
@@ -15,7 +16,7 @@ class PdfImportService {
     }
     final bytes = await File(path).readAsBytes();
     final text = _extractText(bytes);
-    return _parseTransactions(text, fileName);
+    return parseTransactions(text, fileName);
   }
 
   String _extractText(Uint8List bytes) {
@@ -29,7 +30,8 @@ class PdfImportService {
     }
   }
 
-  List<ImportedTransaction> _parseTransactions(String text, String fileName) {
+  @visibleForTesting
+  List<ImportedTransaction> parseTransactions(String text, String fileName) {
     final ids = const Uuid();
     final sourceHint = _detectSourceHint(fileName, text);
     final lines = text
@@ -42,8 +44,8 @@ class PdfImportService {
     final seenKeys = <String>{};
 
     for (final line in lines) {
-      _ParsedRow? entry = _parseLine(line, sourceHint);
-      entry ??= _parseMultilineEntry(lines, lines.indexOf(line), sourceHint);
+      ParsedRow? entry = parseLine(line, sourceHint);
+      entry ??= parseMultilineEntry(lines, lines.indexOf(line), sourceHint);
       if (entry == null) continue;
       final key =
           '${entry.date.toIso8601String()}|${entry.description}|${entry.amount.toStringAsFixed(2)}';
@@ -104,7 +106,7 @@ class PdfImportService {
       final amountRaw = _valueAt(row, hasHeader ? amountIndex : 2);
       if (dateRaw.isEmpty || descRaw.isEmpty || amountRaw.isEmpty) continue;
 
-      final amount = _parseAmount(amountRaw, amountRaw);
+      final amount = parseAmount(amountRaw, amountRaw);
       if (amount == 0) continue;
 
       final description = _cleanDescription(descRaw, 'generic');
@@ -144,7 +146,8 @@ class PdfImportService {
     caseSensitive: false,
   );
 
-  _ParsedRow? _parseLine(String line, String sourceHint) {
+  @visibleForTesting
+  ParsedRow? parseLine(String line, String sourceHint) {
     final patterns = switch (sourceHint) {
       'tng' => _tngPatterns,
       'maybank' => _maybankPatterns,
@@ -161,10 +164,10 @@ class PdfImportService {
       final amountRaw = match.namedGroup('amount');
       if (dateRaw == null || descRaw == null || amountRaw == null) continue;
 
-      final amount = _parseAmount(amountRaw, line);
+      final amount = parseAmount(amountRaw, line);
       if (amount == 0) continue;
 
-      return _ParsedRow(
+      return ParsedRow(
         date: _parseDate(dateRaw),
         description: _cleanDescription(descRaw, sourceHint),
         amount: amount,
@@ -173,7 +176,8 @@ class PdfImportService {
     return null;
   }
 
-  _ParsedRow? _parseMultilineEntry(
+  @visibleForTesting
+  ParsedRow? parseMultilineEntry(
     List<String> lines,
     int startIndex,
     String sourceHint,
@@ -183,7 +187,7 @@ class PdfImportService {
     if (dateMatch == null) return null;
 
     // Skip if this line already parses as a full entry
-    if (_parseLine(line, sourceHint) != null) return null;
+    if (parseLine(line, sourceHint) != null) return null;
 
     final date = _parseDate(dateMatch.group(1)!);
     var description = line.substring(dateMatch.end).trim();
@@ -192,16 +196,16 @@ class PdfImportService {
       final nextLine = lines[startIndex + j];
 
       // Stop if we hit another line that parses fully
-      if (_parseLine(nextLine, sourceHint) != null) break;
+      if (parseLine(nextLine, sourceHint) != null) break;
 
       final amountMatch = _amountSuffixPattern.firstMatch(nextLine);
       if (amountMatch != null) {
         final amountRaw = amountMatch.group(1)!;
         final descPart = nextLine.substring(0, amountMatch.start).trim();
         if (descPart.isNotEmpty) description = '$description $descPart';
-        final amount = _parseAmount(amountRaw, nextLine);
+        final amount = parseAmount(amountRaw, nextLine);
         if (amount != 0) {
-          return _ParsedRow(
+          return ParsedRow(
             date: date,
             description: _cleanDescription(description, sourceHint),
             amount: amount,
@@ -281,7 +285,8 @@ class PdfImportService {
     return DateTime(year, month, day);
   }
 
-  double _parseAmount(String raw, [String? fullLine]) {
+  @visibleForTesting
+  double parseAmount(String raw, [String? fullLine]) {
     final context = fullLine ?? raw;
     final hasCredit = RegExp(r'\bCR\b', caseSensitive: false).hasMatch(context) ||
         context.contains('(');
@@ -423,8 +428,8 @@ class PdfImportService {
   }
 }
 
-class _ParsedRow {
-  const _ParsedRow({
+class ParsedRow {
+  const ParsedRow({
     required this.date,
     required this.description,
     required this.amount,
