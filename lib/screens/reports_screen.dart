@@ -17,6 +17,10 @@ class ReportsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final receipts = ref.watch(filteredReportReceiptsProvider);
     final total = receipts.fold<double>(0, (sum, r) => sum + r.totalAmount);
+    final range = ref.watch(reportRangeProvider);
+    final customRange = ref.watch(reportCustomRangeProvider);
+    final trend = ref.watch(reportTrendProvider);
+    final typeFilter = ref.watch(reportTypeFilterProvider);
 
     final byCategory = <String, double>{};
     for (final receipt in receipts) {
@@ -36,7 +40,7 @@ class ReportsScreen extends ConsumerWidget {
     final highestCategory = categoryEntries.isEmpty
         ? '-'
         : categoryEntries.first.key;
-    final monthlySeries = _monthlySeries(receipts);
+    final monthlySeries = _chartSeries(receipts, range, customRange);
 
     return Scaffold(
       appBar: AppBar(
@@ -58,13 +62,53 @@ class ReportsScreen extends ConsumerWidget {
           const SizedBox(height: 14),
           Wrap(
             spacing: 8,
-            children: ReportRange.values.map((range) {
-              final selected = ref.watch(reportRangeProvider) == range;
+            children: ReportRange.values.map((r) {
+              final selected = range == r;
               return ChoiceChip(
-                label: Text(_rangeLabel(range)),
+                label: Text(_rangeLabel(r, customRange)),
                 selected: selected,
-                onSelected: (_) =>
-                    ref.read(reportRangeProvider.notifier).setRange(range),
+                onSelected: (_) async {
+                  if (r == ReportRange.custom) {
+                    final now = DateTime.now();
+                    final initial = customRange != null
+                        ? DateTimeRange(
+                            start: customRange.$1,
+                            end: customRange.$2,
+                          )
+                        : DateTimeRange(
+                            start: now.subtract(const Duration(days: 30)),
+                            end: now,
+                          );
+                    final picked = await showDateRangePicker(
+                      context: context,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2035),
+                      initialDateRange: initial,
+                    );
+                    if (picked != null) {
+                      ref
+                          .read(reportCustomRangeProvider.notifier)
+                          .setRange(picked.start, picked.end);
+                    }
+                    ref.read(reportRangeProvider.notifier).setRange(r);
+                  } else {
+                    ref.read(reportRangeProvider.notifier).setRange(r);
+                  }
+                },
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: ReportTypeFilter.values.map((f) {
+              final selected = typeFilter == f;
+              return ChoiceChip(
+                label: Text(_typeLabel(f)),
+                selected: selected,
+                onSelected: (_) => ref
+                    .read(reportTypeFilterProvider.notifier)
+                    .setFilter(f),
               );
             }).toList(),
           ),
@@ -88,6 +132,46 @@ class ReportsScreen extends ConsumerWidget {
               ),
             ],
           ),
+          if (trend != null) ...[
+            const SizedBox(height: 14),
+            AppCard(
+              child: Row(
+                children: [
+                  Icon(
+                    (trend['change'] as double) >= 0
+                        ? Icons.trending_up
+                        : Icons.trending_down,
+                    color: (trend['change'] as double) >= 0
+                        ? AppTheme.rose
+                        : AppTheme.green,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${(trend['change'] as double).abs().toStringAsFixed(1)}% vs previous period',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${money(trend['current'] as double)} this period · ${money(trend['previous'] as double)} last period',
+                          style: const TextStyle(
+                            color: AppTheme.muted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
           AppCard(
             child: Column(
@@ -178,9 +262,9 @@ class ReportsScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'LAST 6 MONTHS',
-                  style: TextStyle(
+                Text(
+                  _chartTitle(range, customRange),
+                  style: const TextStyle(
                     color: AppTheme.muted,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.0,
@@ -211,6 +295,11 @@ class ReportsScreen extends ConsumerWidget {
                           sideTitles: SideTitles(
                             showTitles: true,
                             reservedSize: 28,
+                            interval: monthlySeries.length > 12
+                                ? (monthlySeries.length / 6)
+                                    .ceil()
+                                    .toDouble()
+                                : 1,
                             getTitlesWidget: (value, meta) {
                               final index = value.toInt();
                               if (index < 0 || index >= monthlySeries.length) {
@@ -227,7 +316,10 @@ class ReportsScreen extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      barGroups: _monthlyBars(monthlySeries),
+                      barGroups: _monthlyBars(
+                        monthlySeries,
+                        width: monthlySeries.length > 12 ? 14 : 40,
+                      ),
                     ),
                   ),
                 ),
@@ -337,18 +429,116 @@ class ReportsScreen extends ConsumerWidget {
     await service.share(file);
   }
 
-  List<_MonthlyPoint> _monthlySeries(List<Receipt> receipts) {
+  List<_MonthlyPoint> _chartSeries(
+    List<Receipt> receipts,
+    ReportRange range,
+    (DateTime, DateTime)? customRange,
+  ) {
     final now = DateTime.now();
-    return List.generate(6, (index) {
-      final date = DateTime(now.year, now.month - 5 + index);
-      final value = receipts
-          .where((r) => r.date.year == date.year && r.date.month == date.month)
-          .fold<double>(0, (sum, r) => sum + r.totalAmount);
-      return _MonthlyPoint(label: monthShort(date), value: value);
-    });
+
+    switch (range) {
+      case ReportRange.thisMonth:
+        final start = DateTime(now.year, now.month);
+        final daysInMonth =
+            DateTime(now.year, now.month + 1).difference(start).inDays;
+        return List.generate(daysInMonth, (index) {
+          final date = start.add(Duration(days: index));
+          final value = receipts
+              .where(
+                (r) =>
+                    r.date.year == date.year &&
+                    r.date.month == date.month &&
+                    r.date.day == date.day,
+              )
+              .fold<double>(0, (sum, r) => sum + r.totalAmount);
+          return _MonthlyPoint(label: '${date.day}', value: value);
+        });
+      case ReportRange.lastMonth:
+        final start = DateTime(now.year, now.month - 1);
+        final daysInMonth =
+            DateTime(now.year, now.month).difference(start).inDays;
+        return List.generate(daysInMonth, (index) {
+          final date = start.add(Duration(days: index));
+          final value = receipts
+              .where(
+                (r) =>
+                    r.date.year == date.year &&
+                    r.date.month == date.month &&
+                    r.date.day == date.day,
+              )
+              .fold<double>(0, (sum, r) => sum + r.totalAmount);
+          return _MonthlyPoint(label: '${date.day}', value: value);
+        });
+      case ReportRange.quarter:
+        return List.generate(3, (index) {
+          final date = DateTime(now.year, now.month - 2 + index);
+          final value = receipts
+              .where(
+                (r) =>
+                    r.date.year == date.year && r.date.month == date.month,
+              )
+              .fold<double>(0, (sum, r) => sum + r.totalAmount);
+          return _MonthlyPoint(label: monthShort(date), value: value);
+        });
+      case ReportRange.custom:
+        if (customRange == null) {
+          return List.generate(6, (index) {
+            final date = DateTime(now.year, now.month - 5 + index);
+            final value = receipts
+                .where(
+                  (r) =>
+                      r.date.year == date.year &&
+                      r.date.month == date.month,
+                )
+                .fold<double>(0, (sum, r) => sum + r.totalAmount);
+            return _MonthlyPoint(label: monthShort(date), value: value);
+          });
+        }
+        final start = customRange.$1;
+        final end = customRange.$2;
+        final days = end.difference(start).inDays + 1;
+        if (days <= 31) {
+          return List.generate(days, (index) {
+            final date = start.add(Duration(days: index));
+            final value = receipts
+                .where(
+                  (r) =>
+                      r.date.year == date.year &&
+                      r.date.month == date.month &&
+                      r.date.day == date.day,
+                )
+                .fold<double>(0, (sum, r) => sum + r.totalAmount);
+            return _MonthlyPoint(
+              label: '${date.day}/${date.month}',
+              value: value,
+            );
+          });
+        } else {
+          final months = <_MonthlyPoint>[];
+          var current = DateTime(start.year, start.month);
+          final endMonth = DateTime(end.year, end.month);
+          while (!current.isAfter(endMonth)) {
+            final value = receipts
+                .where(
+                  (r) =>
+                      r.date.year == current.year &&
+                      r.date.month == current.month,
+                )
+                .fold<double>(0, (sum, r) => sum + r.totalAmount);
+            months.add(
+              _MonthlyPoint(label: monthShort(current), value: value),
+            );
+            current = DateTime(current.year, current.month + 1);
+          }
+          return months;
+        }
+    }
   }
 
-  List<BarChartGroupData> _monthlyBars(List<_MonthlyPoint> points) {
+  List<BarChartGroupData> _monthlyBars(
+    List<_MonthlyPoint> points, {
+    double? width,
+  }) {
     return List.generate(points.length, (index) {
       final point = points[index];
       return BarChartGroupData(
@@ -357,7 +547,7 @@ class ReportsScreen extends ConsumerWidget {
           BarChartRodData(
             toY: point.value,
             color: AppTheme.indigo,
-            width: 40,
+            width: width ?? (points.length > 12 ? 16 : 40),
             borderRadius: BorderRadius.circular(6),
           ),
         ],
@@ -378,12 +568,29 @@ class ReportsScreen extends ConsumerWidget {
 
   double _chartInterval(List<_MonthlyPoint> points) => _maxChartY(points) / 4;
 
-  String _rangeLabel(ReportRange range) => switch (range) {
-    ReportRange.thisMonth => 'This Month',
-    ReportRange.lastMonth => 'Last Month',
-    ReportRange.quarter => 'Quarter',
-    ReportRange.custom => 'Custom',
-  };
+  String _rangeLabel(ReportRange range, (DateTime, DateTime)? custom) =>
+      switch (range) {
+        ReportRange.thisMonth => 'This Month',
+        ReportRange.lastMonth => 'Last Month',
+        ReportRange.quarter => 'Quarter',
+        ReportRange.custom => custom != null
+            ? '${custom.$1.day}/${custom.$1.month}–${custom.$2.day}/${custom.$2.month}'
+            : 'Custom',
+      };
+
+  String _typeLabel(ReportTypeFilter filter) => switch (filter) {
+        ReportTypeFilter.all => 'All',
+        ReportTypeFilter.business => 'Business',
+        ReportTypeFilter.personal => 'Personal',
+      };
+
+  String _chartTitle(ReportRange range, (DateTime, DateTime)? custom) =>
+      switch (range) {
+        ReportRange.thisMonth => 'THIS MONTH',
+        ReportRange.lastMonth => 'LAST MONTH',
+        ReportRange.quarter => 'LAST 3 MONTHS',
+        ReportRange.custom => 'CUSTOM RANGE',
+      };
 }
 
 const _palette = [
