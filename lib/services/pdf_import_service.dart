@@ -42,7 +42,8 @@ class PdfImportService {
     final seenKeys = <String>{};
 
     for (final line in lines) {
-      final entry = _parseLine(line, sourceHint);
+      _ParsedRow? entry = _parseLine(line, sourceHint);
+      entry ??= _parseMultilineEntry(lines, lines.indexOf(line), sourceHint);
       if (entry == null) continue;
       final key =
           '${entry.date.toIso8601String()}|${entry.description}|${entry.amount.toStringAsFixed(2)}';
@@ -62,19 +63,7 @@ class PdfImportService {
       );
     }
 
-    if (parsed.isNotEmpty) return parsed;
-    return [
-      ImportedTransaction(
-        id: ids.v4(),
-        sourceFileName: fileName,
-        date: DateTime.now(),
-        description: _fallbackDescription(sourceHint),
-        amount: 32.50,
-        category: sourceHint == 'tng' ? 'Transport' : 'Food',
-        type: 'Personal',
-        selectedForImport: true,
-      ),
-    ];
+    return parsed;
   }
 
   List<ImportedTransaction> _parseCsv(String text, String fileName) {
@@ -115,7 +104,7 @@ class PdfImportService {
       final amountRaw = _valueAt(row, hasHeader ? amountIndex : 2);
       if (dateRaw.isEmpty || descRaw.isEmpty || amountRaw.isEmpty) continue;
 
-      final amount = _parseAmount(amountRaw);
+      final amount = _parseAmount(amountRaw, amountRaw);
       if (amount == 0) continue;
 
       final description = _cleanDescription(descRaw, 'generic');
@@ -146,6 +135,15 @@ class PdfImportService {
     return parsed;
   }
 
+  static final _datePrefixPattern = RegExp(
+    r'^(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}\s+[A-Za-z]{3}\s+\d{4}|\d{4}-\d{2}-\d{2})',
+  );
+
+  static final _amountSuffixPattern = RegExp(
+    r'(-?\d[\d,]*\.\d{2})(?:\s+(?:CR|DR))?\s*$',
+    caseSensitive: false,
+  );
+
   _ParsedRow? _parseLine(String line, String sourceHint) {
     final patterns = switch (sourceHint) {
       'tng' => _tngPatterns,
@@ -163,14 +161,56 @@ class PdfImportService {
       final amountRaw = match.namedGroup('amount');
       if (dateRaw == null || descRaw == null || amountRaw == null) continue;
 
-      final amount = _parseAmount(amountRaw);
-      if (amount <= 0) continue;
+      final amount = _parseAmount(amountRaw, line);
+      if (amount == 0) continue;
 
       return _ParsedRow(
         date: _parseDate(dateRaw),
         description: _cleanDescription(descRaw, sourceHint),
         amount: amount,
       );
+    }
+    return null;
+  }
+
+  _ParsedRow? _parseMultilineEntry(
+    List<String> lines,
+    int startIndex,
+    String sourceHint,
+  ) {
+    final line = lines[startIndex];
+    final dateMatch = _datePrefixPattern.firstMatch(line);
+    if (dateMatch == null) return null;
+
+    // Skip if this line already parses as a full entry
+    if (_parseLine(line, sourceHint) != null) return null;
+
+    final date = _parseDate(dateMatch.group(1)!);
+    var description = line.substring(dateMatch.end).trim();
+
+    for (var j = 1; j <= 3 && startIndex + j < lines.length; j++) {
+      final nextLine = lines[startIndex + j];
+
+      // Stop if we hit another line that parses fully
+      if (_parseLine(nextLine, sourceHint) != null) break;
+
+      final amountMatch = _amountSuffixPattern.firstMatch(nextLine);
+      if (amountMatch != null) {
+        final amountRaw = amountMatch.group(1)!;
+        final descPart = nextLine.substring(0, amountMatch.start).trim();
+        if (descPart.isNotEmpty) description = '$description $descPart';
+        final amount = _parseAmount(amountRaw, nextLine);
+        if (amount != 0) {
+          return _ParsedRow(
+            date: date,
+            description: _cleanDescription(description, sourceHint),
+            amount: amount,
+          );
+        }
+      } else {
+        // Accumulate description from intermediate lines
+        description = '$description ${nextLine.trim()}';
+      }
     }
     return null;
   }
@@ -241,17 +281,21 @@ class PdfImportService {
     return DateTime(year, month, day);
   }
 
-  double _parseAmount(String raw) {
+  double _parseAmount(String raw, [String? fullLine]) {
+    final context = fullLine ?? raw;
+    final hasCredit = RegExp(r'\bCR\b', caseSensitive: false).hasMatch(context) ||
+        context.contains('(');
     final cleaned = raw
         .replaceAll(',', '')
         .replaceAll('RM', '')
         .replaceAll('MYR', '')
-        .replaceAll('(', '-')
+        .replaceAll('(', '')
         .replaceAll(')', '')
         .replaceAll(RegExp(r'\bDR\b', caseSensitive: false), '')
         .replaceAll(RegExp(r'\bCR\b', caseSensitive: false), '')
         .trim();
-    return double.tryParse(cleaned) ?? 0;
+    final value = double.tryParse(cleaned) ?? 0;
+    return hasCredit ? -value : value;
   }
 
   String _cleanDescription(String value, String sourceHint) {
@@ -341,14 +385,6 @@ class PdfImportService {
     if (sourceHint == 'tng' && lower.contains('qr')) return 'Food';
     return 'Food';
   }
-
-  String _fallbackDescription(String sourceHint) => switch (sourceHint) {
-    'tng' => 'TNG eWallet payment',
-    'maybank' => 'Maybank statement transaction',
-    'cimb' => 'CIMB statement transaction',
-    'public_bank' => 'Public Bank statement transaction',
-    _ => 'Bank statement transaction',
-  };
 
   int _findHeaderIndex(List<String> header, List<String> candidates) {
     for (var i = 0; i < header.length; i++) {
@@ -455,4 +491,5 @@ final List<RegExp> _genericPatterns = [
   ..._tngPatterns,
   ..._maybankPatterns,
   ..._cimbPatterns,
+  ..._publicBankPatterns,
 ];

@@ -50,6 +50,8 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
     var receipts = [...ref.read(receiptsProvider)];
 
     for (final tx in _transactions.where((t) => t.selectedForImport)) {
+      if (_isDuplicate(tx, receipts)) continue;
+
       final match = _findMatch(tx, receipts);
       final sourceRef =
           '${tx.sourceFileName} · ${shortDate(tx.date)} · ${money(tx.amount)}';
@@ -212,6 +214,22 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
       }
     }
     return bestScore >= 1.2 ? best : null;
+  }
+
+  bool _isDuplicate(ImportedTransaction tx, List<Receipt> receipts) {
+    for (final receipt in receipts) {
+      final amountGap = (receipt.totalAmount - tx.amount).abs();
+      if (amountGap > 0.01) continue;
+      final dayGap = receipt.date.difference(tx.date).inDays.abs();
+      if (dayGap > 1) continue;
+      final normalizedDesc = _normalized(tx.description);
+      final normalizedMerchant = _normalized(receipt.merchantName);
+      final descMatch = normalizedMerchant.contains(normalizedDesc) ||
+          normalizedDesc.contains(normalizedMerchant) ||
+          receipt.rawOcrText.toLowerCase().contains(tx.description.toLowerCase());
+      if (descMatch) return true;
+    }
+    return false;
   }
 
   String _normalized(String value) =>

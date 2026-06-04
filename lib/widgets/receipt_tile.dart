@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/receipt.dart';
+import '../providers/archive_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 
-class ReceiptTile extends StatelessWidget {
+class ReceiptTile extends ConsumerWidget {
   const ReceiptTile({super.key, required this.receipt, required this.onTap});
 
   final Receipt receipt;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final archive = ref.watch(archiveByReceiptIdProvider(receipt.id));
+    final hasLinks = archive?.linkedStatementRefs.isNotEmpty ?? false;
+
     return ListTile(
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
@@ -64,6 +69,27 @@ class ReceiptTile extends StatelessWidget {
                 child: Text(
                   receipt.tags.first,
                   style: const TextStyle(fontSize: 11, color: AppTheme.green),
+                ),
+              ),
+            ],
+            if (hasLinks) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.cyan.withValues(alpha: .16),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.link, size: 10, color: AppTheme.cyan),
+                    SizedBox(width: 4),
+                    Text(
+                      'Linked',
+                      style: TextStyle(fontSize: 11, color: AppTheme.cyan),
+                    ),
+                  ],
                 ),
               ),
             ],
