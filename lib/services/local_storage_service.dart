@@ -358,8 +358,20 @@ class LocalStorageService {
           ReceiptItem(
             name: 'Nasi Lemak Ayam',
             quantity: 1,
-            unitPrice: 18.9,
-            totalPrice: 18.9,
+            unitPrice: 18.90,
+            totalPrice: 18.90,
+          ),
+          ReceiptItem(
+            name: 'Teh Tarik',
+            quantity: 1,
+            unitPrice: 3.50,
+            totalPrice: 3.50,
+          ),
+          ReceiptItem(
+            name: 'Sambal Sotong',
+            quantity: 1,
+            unitPrice: 6.30,
+            totalPrice: 6.30,
           ),
         ],
       ),
