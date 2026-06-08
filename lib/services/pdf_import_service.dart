@@ -1,7 +1,6 @@
 import 'dart:io';
-import 'dart:typed_data';
 
-import 'package:meta/meta.dart';
+import 'package:flutter/foundation.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:uuid/uuid.dart';
 
@@ -19,13 +18,22 @@ class PdfImportService {
     return parseTransactions(text, fileName);
   }
 
+  Future<String> extractRawText(String path) async {
+    if (path.toLowerCase().endsWith('.csv')) {
+      return File(path).readAsString();
+    }
+    final bytes = await File(path).readAsBytes();
+    return _extractText(bytes);
+  }
+
   String _extractText(Uint8List bytes) {
     try {
       final document = PdfDocument(inputBytes: bytes);
       final text = PdfTextExtractor(document).extractText();
       document.dispose();
       return text;
-    } catch (_) {
+    } catch (error) {
+      debugPrint('[PdfImport] Text extraction failed: $error');
       return '';
     }
   }

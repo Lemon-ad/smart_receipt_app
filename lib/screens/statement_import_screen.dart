@@ -7,6 +7,7 @@ import '../models/imported_transaction.dart';
 import '../models/receipt.dart';
 import '../providers/receipt_provider.dart';
 import '../services/local_storage_service.dart';
+import '../services/llm_service.dart';
 import '../services/pdf_import_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
@@ -34,10 +35,41 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
     setState(() {
       _loading = true;
       _fileName = result.files.single.name;
+      _transactions = [];
     });
-    final rows = await PdfImportService().extractTransactions(
-      result.files.single.path!,
-    );
+
+    final path = result.files.single.path!;
+    var rows = await PdfImportService().extractTransactions(path);
+
+    // Fallback to LLM when regex returns nothing but text was extracted.
+    if (rows.isEmpty && !path.toLowerCase().endsWith('.csv')) {
+      final rawText = await PdfImportService().extractRawText(path);
+      if (rawText.trim().isNotEmpty) {
+        debugPrint('[StatementImport] Regex parsing returned 0 rows. Trying LLM...');
+        final llmRows = await LlmService().parseStatement(rawText);
+        final ids = const Uuid();
+        rows = llmRows
+            .map(
+              (r) => ImportedTransaction(
+                id: ids.v4(),
+                sourceFileName: _fileName!,
+                date: r.date,
+                description: r.description,
+                amount: r.amount,
+                category: r.category,
+                type: r.type,
+                selectedForImport: true,
+              ),
+            )
+            .toList();
+        if (mounted && rows.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Parsed with AI — review before importing')),
+          );
+        }
+      }
+    }
+
     setState(() {
       _transactions = rows;
       _loading = false;
@@ -134,6 +166,18 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
             const Padding(
               padding: EdgeInsets.all(18),
               child: LinearProgressIndicator(),
+            ),
+          if (_fileName != null && !_loading && _transactions.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Center(
+                child: Text(
+                  'No transactions found in this file.\n'
+                  'The PDF may be image-based (scanned) or use an unsupported bank format.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppTheme.muted),
+                ),
+              ),
             ),
           const SizedBox(height: 14),
           ..._transactions.map((tx) {
