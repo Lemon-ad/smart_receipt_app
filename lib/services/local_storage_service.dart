@@ -244,6 +244,40 @@ class LocalStorageService {
     }
   }
 
+  Future<void> addCategory(String category) async {
+    final normalized = category.trim();
+    if (normalized.isEmpty) return;
+    if (_categories.values.any((c) => c.toLowerCase() == normalized.toLowerCase())) {
+      throw StateError('Category already exists.');
+    }
+    await _categories.add(normalized);
+  }
+
+  Future<void> removeCategory(String category) async {
+    final key = _categories.keys.firstWhere(
+      (k) => _categories.get(k) == category,
+      orElse: () => null,
+    );
+    if (key != null) await _categories.delete(key);
+  }
+
+  Future<void> addTag(String tag) async {
+    final normalized = tag.trim().toUpperCase();
+    if (normalized.isEmpty) return;
+    if (_tags.values.any((t) => t.toUpperCase() == normalized)) {
+      throw StateError('Tag already exists.');
+    }
+    await _tags.add(normalized);
+  }
+
+  Future<void> removeTag(String tag) async {
+    final key = _tags.keys.firstWhere(
+      (k) => _tags.get(k) == tag,
+      orElse: () => null,
+    );
+    if (key != null) await _tags.delete(key);
+  }
+
   Future<void> _openEncryptedBoxes() async {
     _receipts = await Hive.openBox<Receipt>(
       receiptsBoxName,
