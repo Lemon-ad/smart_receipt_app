@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/archive_provider.dart';
 import '../providers/receipt_provider.dart';
+import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/app_card.dart';
@@ -19,6 +20,7 @@ class ReceiptDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final receipt = ref.watch(receiptByIdProvider(receiptId));
     final archive = ref.watch(archiveByReceiptIdProvider(receiptId));
+    final dateFormat = ref.watch(preferencesProvider).dateFormat;
     if (receipt == null) {
       return const Scaffold(body: Center(child: Text('Receipt not found')));
     }
@@ -40,7 +42,7 @@ class ReceiptDetailScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  shortDate(receipt.date),
+                  shortDate(receipt.date, format: dateFormat),
                   style: const TextStyle(color: AppTheme.muted),
                 ),
                 const SizedBox(height: 18),

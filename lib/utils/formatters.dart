@@ -5,9 +5,12 @@ String money(num value, {String symbol = 'RM '}) =>
 String moneyAmount(num value) =>
     NumberFormat.currency(locale: 'ms_MY', symbol: '').format(value).trim();
 
-String shortDate(DateTime date) => DateFormat('dd MMM yyyy').format(date);
-String monthLabel(DateTime date) => DateFormat('MMMM yyyy').format(date);
-String monthShort(DateTime date) => DateFormat('MMM').format(date);
+String shortDate(DateTime date, {String? format}) =>
+    DateFormat(format ?? 'dd MMM yyyy').format(date);
+String monthLabel(DateTime date, {String? format}) =>
+    DateFormat(format ?? 'MMMM yyyy').format(date);
+String monthShort(DateTime date, {String? format}) =>
+    DateFormat(format ?? 'MMM').format(date);
 
 String initials(String value) {
   final parts = value

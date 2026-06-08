@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/receipt.dart';
 import '../providers/receipt_provider.dart';
+import '../providers/settings_provider.dart';
 import '../services/llm_service.dart';
 import '../services/ocr_service.dart';
 import '../theme/app_theme.dart';
@@ -321,6 +322,7 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
   Future<void> _save() async {
     final now = DateTime.now();
     final existing = widget.existingReceipt;
+    final prefs = ref.read(preferencesProvider);
     final receipt = Receipt(
       id: existing?.id ?? const Uuid().v4(),
       merchantName: _merchant.text.trim().isEmpty
@@ -328,7 +330,7 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
           : _merchant.text.trim(),
       date: _date,
       totalAmount: double.tryParse(_amount.text.trim()) ?? 0,
-      currency: 'MYR',
+      currency: prefs.currency,
       category: _category.text.trim().isEmpty
           ? 'Uncategorized'
           : _category.text.trim(),

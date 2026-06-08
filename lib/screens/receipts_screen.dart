@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/receipt.dart';
 import '../providers/receipt_provider.dart';
+import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/app_card.dart';
@@ -26,6 +27,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
   final _chips = const ['All', 'Personal', 'Business', 'This Month', 'Travel'];
   final _summaryPeriods = const ['Weekly', 'Monthly', 'Yearly'];
   final Set<String> _selected = {};
+  final Set<String> _filterTags = {};
 
   bool get _isSelecting => _selected.isNotEmpty;
 
@@ -79,6 +81,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
   Widget build(BuildContext context) {
     final receipts = ref.watch(receiptsProvider);
     final filtered = _applyFilters(receipts);
+    final dateFormat = ref.watch(preferencesProvider).dateFormat;
     final now = DateTime.now();
     final startOfWeek = DateTime(
       now.year,
@@ -224,7 +227,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
         children: [
           Text(
-            monthLabel(now),
+            monthLabel(now, format: dateFormat),
             style: const TextStyle(
               color: AppTheme.muted,
               fontWeight: FontWeight.w700,
@@ -279,12 +282,39 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
               const SizedBox(width: 10),
               SoftIconButton(
                 icon: Icons.filter_list,
-                tooltip: 'Filter',
-                onPressed: () => setState(() => _chip = 'This Month'),
+                tooltip: 'Filter by tags',
+                onPressed: _showTagFilter,
               ),
             ],
           ),
           const SizedBox(height: 12),
+          if (_filterTags.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ..._filterTags.map(
+                    (tag) => Chip(
+                      label: Text(tag),
+                      deleteIcon: const Icon(Icons.close, size: 16),
+                      onDeleted: () => setState(() => _filterTags.remove(tag)),
+                      backgroundColor: AppTheme.accent.withValues(alpha: .18),
+                      labelStyle: const TextStyle(
+                        color: AppTheme.text,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  ActionChip(
+                    label: const Text('Clear filters'),
+                    onPressed: () => setState(_filterTags.clear),
+                    backgroundColor: AppTheme.panel2,
+                  ),
+                ],
+              ),
+            ),
           Wrap(
             spacing: 8,
             children: _chips.map((chip) {
@@ -301,7 +331,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
           const SizedBox(height: 18),
           SectionHeader('${filtered.length} receipts'),
           const SizedBox(height: 8),
-          ..._grouped(filtered).entries.map(
+          ..._grouped(filtered, dateFormat).entries.map(
             (entry) => AppCard(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
               child: Column(
@@ -341,6 +371,29 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
     );
   }
 
+  Future<void> _showTagFilter() async {
+    final tags = ref.read(tagsProvider);
+    if (tags.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No tags available.')),
+        );
+      }
+      return;
+    }
+    final result = await showModalBottomSheet<Set<String>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _TagFilterSheet(
+        allTags: tags,
+        selected: _filterTags,
+      ),
+    );
+    if (result != null) {
+      setState(() => _filterTags..clear()..addAll(result));
+    }
+  }
+
   List<Receipt> _applyFilters(List<Receipt> receipts) {
     final now = DateTime.now();
     return receipts.where((receipt) {
@@ -356,16 +409,94 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
           receipt.category == 'Travel' || receipt.tags.contains('TRAVEL'),
         _ => true,
       };
-      return matchesSearch && matchesChip;
+      final matchesTags = _filterTags.isEmpty ||
+          receipt.tags.any((tag) => _filterTags.contains(tag));
+      return matchesSearch && matchesChip && matchesTags;
     }).toList();
   }
 
-  Map<String, List<Receipt>> _grouped(List<Receipt> receipts) {
+  Map<String, List<Receipt>> _grouped(List<Receipt> receipts, String dateFormat) {
     final grouped = <String, List<Receipt>>{};
     for (final receipt in receipts) {
-      grouped.putIfAbsent(monthLabel(receipt.date), () => []).add(receipt);
+      grouped.putIfAbsent(monthLabel(receipt.date, format: dateFormat), () => []).add(receipt);
     }
     return grouped;
+  }
+}
+
+class _TagFilterSheet extends StatefulWidget {
+  const _TagFilterSheet({required this.allTags, required this.selected});
+
+  final List<String> allTags;
+  final Set<String> selected;
+
+  @override
+  State<_TagFilterSheet> createState() => _TagFilterSheetState();
+}
+
+class _TagFilterSheetState extends State<_TagFilterSheet> {
+  late Set<String> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = {...widget.selected};
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Filter by tags',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, _selected),
+                  child: const Text('Apply'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: widget.allTags.map((tag) {
+                final isSelected = _selected.contains(tag);
+                return FilterChip(
+                  label: Text(tag),
+                  selected: isSelected,
+                  onSelected: (value) {
+                    setState(() {
+                      if (value) {
+                        _selected.add(tag);
+                      } else {
+                        _selected.remove(tag);
+                      }
+                    });
+                  },
+                  selectedColor: AppTheme.accent.withValues(alpha: .24),
+                  checkmarkColor: AppTheme.accent,
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 }
 

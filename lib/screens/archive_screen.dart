@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/archive_provider.dart';
 import '../providers/receipt_provider.dart';
+import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/app_card.dart';
@@ -21,6 +22,7 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
   Widget build(BuildContext context) {
     final receipts = ref.watch(receiptsProvider);
     final archives = ref.watch(archivesProvider);
+    final dateFormat = ref.watch(preferencesProvider).dateFormat;
     final isSelecting = _selected.isNotEmpty;
 
     return Scaffold(
@@ -85,7 +87,7 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(shortDate(receipt.date)),
+                    Text(shortDate(receipt.date, format: dateFormat)),
                     const SizedBox(height: 4),
                     Row(
                       children: [
@@ -111,7 +113,7 @@ class _ArchiveScreenState extends ConsumerState<ArchiveScreen> {
                         const SizedBox(width: 4),
                         Text(
                           verified
-                              ? 'Verified ${shortDate(archive!.lastVerifiedAt!)}'
+                              ? 'Verified ${shortDate(archive!.lastVerifiedAt!, format: dateFormat)}'
                               : 'Not verified',
                           style: TextStyle(
                             fontSize: 12,

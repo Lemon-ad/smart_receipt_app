@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../models/imported_transaction.dart';
 import '../models/receipt.dart';
 import '../providers/receipt_provider.dart';
+import '../providers/settings_provider.dart';
 import '../services/local_storage_service.dart';
 import '../services/llm_service.dart';
 import '../services/pdf_import_service.dart';
@@ -79,6 +80,7 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
   Future<void> _importSelected() async {
     final ids = const Uuid();
     final storage = ref.read(localStorageProvider);
+    final prefs = ref.read(preferencesProvider);
     var receipts = [...ref.read(receiptsProvider)];
 
     for (final tx in _transactions.where((t) => t.selectedForImport)) {
@@ -86,7 +88,7 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
 
       final match = _findMatch(tx, receipts);
       final sourceRef =
-          '${tx.sourceFileName} · ${shortDate(tx.date)} · ${money(tx.amount)}';
+          '${tx.sourceFileName} · ${shortDate(tx.date, format: prefs.dateFormat)} · ${money(tx.amount)}';
 
       if (match != null && !(storage.archiveFor(match.id)?.isLocked ?? false)) {
         final updated = match.copyWith(
@@ -111,7 +113,7 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
         merchantName: tx.description,
         date: tx.date,
         totalAmount: tx.amount,
-        currency: 'MYR',
+        currency: prefs.currency,
         category: tx.category,
         type: tx.type,
         paymentMethod: _statementPaymentMethod(tx),
