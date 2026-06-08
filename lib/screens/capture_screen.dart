@@ -216,6 +216,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
   }
 
   Future<void> _scanFromGallery() async {
+    final allowed = await _ensurePhotoLibraryPermission();
+    if (!allowed) return;
     await _runScan(
       (path) => FlutterEdgeDetection.detectEdgeFromGallery(
         path,
@@ -274,6 +276,31 @@ class _CaptureScreenState extends State<CaptureScreen> {
     final message = requested.isPermanentlyDenied
         ? 'Camera permission is blocked. Open app settings and allow Camera to scan receipts.'
         : 'Camera permission is required for live receipt scanning.';
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+
+    if (requested.isPermanentlyDenied) {
+      await openAppSettings();
+    }
+    return false;
+  }
+
+  Future<bool> _ensurePhotoLibraryPermission() async {
+    final status = await Permission.photos.status;
+    if (status.isGranted || status.isLimited) {
+      debugPrint('[Capture] Photo library permission already granted.');
+      return true;
+    }
+
+    final requested = await Permission.photos.request();
+    debugPrint('[Capture] Photo library permission request result=$requested');
+    if (requested.isGranted || requested.isLimited) return true;
+
+    if (!mounted) return false;
+    final message = requested.isPermanentlyDenied
+        ? 'Photo library permission is blocked. Open app settings and allow Photos to import receipt images.'
+        : 'Photo library permission is required to import receipt images.';
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
