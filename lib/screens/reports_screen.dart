@@ -287,6 +287,21 @@ class ReportsScreen extends ConsumerWidget {
                           strokeWidth: 1,
                         ),
                       ),
+                      barTouchData: BarTouchData(
+                        touchTooltipData: BarTouchTooltipData(
+                          getTooltipColor: (_) => AppTheme.panel2,
+                          getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                            return BarTooltipItem(
+                              moneyAmount(rod.toY),
+                              const TextStyle(
+                                color: AppTheme.text,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                       titlesData: FlTitlesData(
                         topTitles: const AxisTitles(),
                         rightTitles: const AxisTitles(),
@@ -318,6 +333,7 @@ class ReportsScreen extends ConsumerWidget {
                       ),
                       barGroups: _monthlyBars(
                         monthlySeries,
+                        showLabels: monthlySeries.length <= 10,
                         width: monthlySeries.length > 12 ? 14 : 40,
                       ),
                     ),
@@ -441,33 +457,33 @@ class ReportsScreen extends ConsumerWidget {
         final start = DateTime(now.year, now.month);
         final daysInMonth =
             DateTime(now.year, now.month + 1).difference(start).inDays;
-        return List.generate(daysInMonth, (index) {
-          final date = start.add(Duration(days: index));
+        final weeks = (daysInMonth / 7).ceil();
+        return List.generate(weeks, (index) {
+          final weekStart = start.add(Duration(days: index * 7));
+          final weekEnd = weekStart.add(const Duration(days: 6));
           final value = receipts
               .where(
                 (r) =>
-                    r.date.year == date.year &&
-                    r.date.month == date.month &&
-                    r.date.day == date.day,
+                    !r.date.isBefore(weekStart) && !r.date.isAfter(weekEnd),
               )
               .fold<double>(0, (sum, r) => sum + r.totalAmount);
-          return _MonthlyPoint(label: '${date.day}', value: value);
+          return _MonthlyPoint(label: 'W${index + 1}', value: value);
         });
       case ReportRange.lastMonth:
         final start = DateTime(now.year, now.month - 1);
         final daysInMonth =
             DateTime(now.year, now.month).difference(start).inDays;
-        return List.generate(daysInMonth, (index) {
-          final date = start.add(Duration(days: index));
+        final weeks = (daysInMonth / 7).ceil();
+        return List.generate(weeks, (index) {
+          final weekStart = start.add(Duration(days: index * 7));
+          final weekEnd = weekStart.add(const Duration(days: 6));
           final value = receipts
               .where(
                 (r) =>
-                    r.date.year == date.year &&
-                    r.date.month == date.month &&
-                    r.date.day == date.day,
+                    !r.date.isBefore(weekStart) && !r.date.isAfter(weekEnd),
               )
               .fold<double>(0, (sum, r) => sum + r.totalAmount);
-          return _MonthlyPoint(label: '${date.day}', value: value);
+          return _MonthlyPoint(label: 'W${index + 1}', value: value);
         });
       case ReportRange.quarter:
         return List.generate(3, (index) {
@@ -538,6 +554,7 @@ class ReportsScreen extends ConsumerWidget {
   List<BarChartGroupData> _monthlyBars(
     List<_MonthlyPoint> points, {
     double? width,
+    bool showLabels = false,
   }) {
     return List.generate(points.length, (index) {
       final point = points[index];
@@ -549,6 +566,17 @@ class ReportsScreen extends ConsumerWidget {
             color: AppTheme.indigo,
             width: width ?? (points.length > 12 ? 16 : 40),
             borderRadius: BorderRadius.circular(6),
+            label: showLabels && point.value > 0
+                ? BarChartRodLabel(
+                    show: true,
+                    text: moneyAmount(point.value),
+                    style: const TextStyle(
+                      color: AppTheme.text,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 10,
+                    ),
+                  )
+                : const BarChartRodLabel(show: false),
           ),
         ],
       );
@@ -712,39 +740,41 @@ class _CategoryLegend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: categoryEntries.asMap().entries.map((entry) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 7),
-          child: Row(
-            children: [
-              Container(
-                width: 11,
-                height: 11,
-                decoration: BoxDecoration(
-                  color: _palette[entry.key % _palette.length],
-                  shape: BoxShape.circle,
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: categoryEntries.asMap().entries.map((entry) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            child: Row(
+              children: [
+                Container(
+                  width: 11,
+                  height: 11,
+                  decoration: BoxDecoration(
+                    color: _palette[entry.key % _palette.length],
+                    shape: BoxShape.circle,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  entry.value.key,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    entry.value.key,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                money(entry.value.value),
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
+                const SizedBox(width: 10),
+                Text(
+                  money(entry.value.value),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 }
