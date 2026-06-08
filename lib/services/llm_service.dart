@@ -14,6 +14,8 @@ class ParsedReceipt {
     required this.category,
     required this.paymentMethod,
     required this.items,
+    this.taxAmount = 0.0,
+    this.serviceChargeAmount = 0.0,
   });
 
   final String merchantName;
@@ -22,6 +24,24 @@ class ParsedReceipt {
   final String category;
   final String paymentMethod;
   final List<ReceiptItem> items;
+  final double taxAmount;
+  final double serviceChargeAmount;
+}
+
+class StatementRow {
+  StatementRow({
+    required this.date,
+    required this.description,
+    required this.amount,
+    required this.category,
+    required this.type,
+  });
+
+  final DateTime date;
+  final String description;
+  final double amount;
+  final String category;
+  final String type;
 }
 
 class LlmService {
@@ -61,7 +81,7 @@ class LlmService {
             {
               'role': 'system',
               'content':
-                  'Extract receipt fields. Return JSON only with keys merchantName, date, totalAmount, category, paymentMethod, items. items is an array of {name, quantity, unitPrice, totalPrice}. Use MYR context for Malaysian receipts.',
+                  'Extract receipt fields. Return JSON only with keys merchantName, date, totalAmount, category, paymentMethod, taxAmount, serviceChargeAmount, items. items is an array of {name, quantity, unitPrice, totalPrice}. taxAmount is government tax (SST/GST). serviceChargeAmount is service charge. Use MYR context for Malaysian receipts.',
             },
             {'role': 'user', 'content': ocrText},
           ],
@@ -112,6 +132,11 @@ class LlmService {
           _amountFromText(ocrText),
       category: (json['category'] ?? 'Food').toString(),
       paymentMethod: (json['paymentMethod'] ?? 'TNG eWallet').toString(),
+      taxAmount:
+          double.tryParse((json['taxAmount'] ?? '0').toString()) ?? 0.0,
+      serviceChargeAmount:
+          double.tryParse((json['serviceChargeAmount'] ?? '0').toString()) ??
+          0.0,
       items: itemsRaw.map((item) {
         final map = Map<String, dynamic>.from(item as Map);
         return ReceiptItem(
@@ -158,6 +183,65 @@ class LlmService {
       paymentMethod: payment,
       items: const [],
     );
+  }
+
+  Future<List<StatementRow>> parseStatement(String text) async {
+    if (apiKey.isEmpty) {
+      debugPrint('[LLM] No API key configured. Cannot parse statement.');
+      return [];
+    }
+    try {
+      debugPrint(
+        '[LLM] Sending statement text to OpenRouter. textLength=${text.length}',
+      );
+      final response = await http.post(
+        Uri.parse('https://openrouter.ai/api/v1/chat/completions'),
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://coursework.local/smart-receipt-ai',
+          'X-Title': 'Smart Receipt AI',
+        },
+        body: jsonEncode({
+          'model': model,
+          'messages': [
+            {
+              'role': 'system',
+              'content':
+                  'Extract transactions from a bank statement. The text may have extra spaces between characters due to PDF extraction. Infer the actual words and values. Return JSON only with key "transactions" which is an array of {date (YYYY-MM-DD), description, amount (positive for expenses, negative for income/refunds), category, type (Personal or Business)}. Use MYR context for Malaysian receipts.',
+            },
+            {'role': 'user', 'content': text},
+          ],
+          'temperature': 0.1,
+          'response_format': {'type': 'json_object'},
+        }),
+      );
+      debugPrint('[LLM] Statement parse response status=${response.statusCode}');
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        debugPrint('[LLM] Statement parse failed. body=${response.body}');
+        return [];
+      }
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final content =
+          body['choices']?[0]?['message']?['content']?.toString() ?? '{}';
+      final json = jsonDecode(_jsonOnly(content)) as Map<String, dynamic>;
+      final rowsRaw = (json['transactions'] as List?) ?? [];
+      return rowsRaw.map((row) {
+        final map = Map<String, dynamic>.from(row as Map);
+        return StatementRow(
+          date:
+              DateTime.tryParse((map['date'] ?? '').toString()) ??
+              DateTime.now(),
+          description: (map['description'] ?? 'Unknown').toString(),
+          amount: double.tryParse((map['amount'] ?? '0').toString()) ?? 0,
+          category: (map['category'] ?? 'Uncategorized').toString(),
+          type: (map['type'] ?? 'Personal').toString(),
+        );
+      }).toList();
+    } catch (error) {
+      debugPrint('[LLM] Statement parse error: $error');
+      return [];
+    }
   }
 
   double _amountFromText(String text) {

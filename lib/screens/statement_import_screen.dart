@@ -6,7 +6,9 @@ import 'package:uuid/uuid.dart';
 import '../models/imported_transaction.dart';
 import '../models/receipt.dart';
 import '../providers/receipt_provider.dart';
+import '../providers/settings_provider.dart';
 import '../services/local_storage_service.dart';
+import '../services/llm_service.dart';
 import '../services/pdf_import_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
@@ -34,10 +36,41 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
     setState(() {
       _loading = true;
       _fileName = result.files.single.name;
+      _transactions = [];
     });
-    final rows = await PdfImportService().extractTransactions(
-      result.files.single.path!,
-    );
+
+    final path = result.files.single.path!;
+    var rows = await PdfImportService().extractTransactions(path);
+
+    // Fallback to LLM when regex returns nothing but text was extracted.
+    if (rows.isEmpty && !path.toLowerCase().endsWith('.csv')) {
+      final rawText = await PdfImportService().extractRawText(path);
+      if (rawText.trim().isNotEmpty) {
+        debugPrint('[StatementImport] Regex parsing returned 0 rows. Trying LLM...');
+        final llmRows = await LlmService().parseStatement(rawText);
+        final ids = const Uuid();
+        rows = llmRows
+            .map(
+              (r) => ImportedTransaction(
+                id: ids.v4(),
+                sourceFileName: _fileName!,
+                date: r.date,
+                description: r.description,
+                amount: r.amount,
+                category: r.category,
+                type: r.type,
+                selectedForImport: true,
+              ),
+            )
+            .toList();
+        if (mounted && rows.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Parsed with AI — review before importing')),
+          );
+        }
+      }
+    }
+
     setState(() {
       _transactions = rows;
       _loading = false;
@@ -47,12 +80,15 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
   Future<void> _importSelected() async {
     final ids = const Uuid();
     final storage = ref.read(localStorageProvider);
+    final prefs = ref.read(preferencesProvider);
     var receipts = [...ref.read(receiptsProvider)];
 
     for (final tx in _transactions.where((t) => t.selectedForImport)) {
+      if (_isDuplicate(tx, receipts)) continue;
+
       final match = _findMatch(tx, receipts);
       final sourceRef =
-          '${tx.sourceFileName} · ${shortDate(tx.date)} · ${money(tx.amount)}';
+          '${tx.sourceFileName} · ${shortDate(tx.date, format: prefs.dateFormat)} · ${money(tx.amount, currency: prefs.currency)}';
 
       if (match != null && !(storage.archiveFor(match.id)?.isLocked ?? false)) {
         final updated = match.copyWith(
@@ -77,7 +113,7 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
         merchantName: tx.description,
         date: tx.date,
         totalAmount: tx.amount,
-        currency: 'MYR',
+        currency: prefs.currency,
         category: tx.category,
         type: tx.type,
         paymentMethod: _statementPaymentMethod(tx),
@@ -133,6 +169,18 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
               padding: EdgeInsets.all(18),
               child: LinearProgressIndicator(),
             ),
+          if (_fileName != null && !_loading && _transactions.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Center(
+                child: Text(
+                  'No transactions found in this file.\n'
+                  'The PDF may be image-based (scanned) or use an unsupported bank format.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppTheme.muted),
+                ),
+              ),
+            ),
           const SizedBox(height: 14),
           ..._transactions.map((tx) {
             final match = _findMatch(tx, receipts);
@@ -161,7 +209,7 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
                   style: const TextStyle(color: AppTheme.muted),
                 ),
                 secondary: Text(
-                  money(tx.amount),
+                  money(tx.amount, currency: ref.watch(preferencesProvider).currency),
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
               ),
@@ -212,6 +260,22 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
       }
     }
     return bestScore >= 1.2 ? best : null;
+  }
+
+  bool _isDuplicate(ImportedTransaction tx, List<Receipt> receipts) {
+    for (final receipt in receipts) {
+      final amountGap = (receipt.totalAmount - tx.amount).abs();
+      if (amountGap > 0.01) continue;
+      final dayGap = receipt.date.difference(tx.date).inDays.abs();
+      if (dayGap > 1) continue;
+      final normalizedDesc = _normalized(tx.description);
+      final normalizedMerchant = _normalized(receipt.merchantName);
+      final descMatch = normalizedMerchant.contains(normalizedDesc) ||
+          normalizedDesc.contains(normalizedMerchant) ||
+          receipt.rawOcrText.toLowerCase().contains(tx.description.toLowerCase());
+      if (descMatch) return true;
+    }
+    return false;
   }
 
   String _normalized(String value) =>

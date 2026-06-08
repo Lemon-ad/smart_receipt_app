@@ -112,7 +112,7 @@ class LocalStorageService {
     final normalizedReceipt = receipt.copyWith(
       imagePath: archivedImagePath ?? receipt.imagePath,
     );
-    final hash = await _computeReceiptHash(
+    final hash = await computeReceiptHash(
       normalizedReceipt,
       archivedImagePath,
     );
@@ -148,6 +148,16 @@ class LocalStorageService {
     await _ownerships.delete(id);
   }
 
+  Future<void> deleteReceipts(List<String> ids) async {
+    for (final id in ids) {
+      try {
+        await deleteReceipt(id);
+      } catch (error) {
+        debugPrint('[Storage] Skipped delete for id=$id error=$error');
+      }
+    }
+  }
+
   Future<void> upsertTransaction(ImportedTransaction transaction) =>
       _transactions.put(transaction.id, transaction);
 
@@ -166,7 +176,7 @@ class LocalStorageService {
       receipt.imagePath,
       archive?.archivedImagePath,
     );
-    final hash = await _computeReceiptHash(receipt, archivedImagePath);
+    final hash = await computeReceiptHash(receipt, archivedImagePath);
     await _archives.put(
       receiptId,
       ReceiptArchive(
@@ -186,7 +196,7 @@ class LocalStorageService {
     final receipt = _receipts.get(receiptId);
     final archive = _archives.get(receiptId);
     if (receipt == null || archive == null) return false;
-    final latestHash = await _computeReceiptHash(
+    final latestHash = await computeReceiptHash(
       receipt,
       archive.archivedImagePath,
     );
@@ -232,6 +242,40 @@ class LocalStorageService {
     if (_settings.isEmpty) {
       await savePreferences(preferences);
     }
+  }
+
+  Future<void> addCategory(String category) async {
+    final normalized = category.trim();
+    if (normalized.isEmpty) return;
+    if (_categories.values.any((c) => c.toLowerCase() == normalized.toLowerCase())) {
+      throw StateError('Category already exists.');
+    }
+    await _categories.add(normalized);
+  }
+
+  Future<void> removeCategory(String category) async {
+    final key = _categories.keys.firstWhere(
+      (k) => _categories.get(k) == category,
+      orElse: () => null,
+    );
+    if (key != null) await _categories.delete(key);
+  }
+
+  Future<void> addTag(String tag) async {
+    final normalized = tag.trim().toUpperCase();
+    if (normalized.isEmpty) return;
+    if (_tags.values.any((t) => t.toUpperCase() == normalized)) {
+      throw StateError('Tag already exists.');
+    }
+    await _tags.add(normalized);
+  }
+
+  Future<void> removeTag(String tag) async {
+    final key = _tags.keys.firstWhere(
+      (k) => _tags.get(k) == tag,
+      orElse: () => null,
+    );
+    if (key != null) await _tags.delete(key);
   }
 
   Future<void> _openEncryptedBoxes() async {
@@ -358,8 +402,20 @@ class LocalStorageService {
           ReceiptItem(
             name: 'Nasi Lemak Ayam',
             quantity: 1,
-            unitPrice: 18.9,
-            totalPrice: 18.9,
+            unitPrice: 18.90,
+            totalPrice: 18.90,
+          ),
+          ReceiptItem(
+            name: 'Teh Tarik',
+            quantity: 1,
+            unitPrice: 3.50,
+            totalPrice: 3.50,
+          ),
+          ReceiptItem(
+            name: 'Sambal Sotong',
+            quantity: 1,
+            unitPrice: 6.30,
+            totalPrice: 6.30,
           ),
         ],
       ),
@@ -480,7 +536,8 @@ class LocalStorageService {
     return targetPath;
   }
 
-  Future<String> _computeReceiptHash(
+  @visibleForTesting
+  Future<String> computeReceiptHash(
     Receipt receipt,
     String? archivedImagePath,
   ) async {
@@ -495,6 +552,21 @@ class LocalStorageService {
       ..writeln(receipt.paymentMethod)
       ..writeln(receipt.tags.join(','))
       ..writeln(receipt.rawOcrText);
+    for (final item in receipt.items) {
+      content
+        ..writeln(item.name)
+        ..writeln(item.quantity.toStringAsFixed(2))
+        ..writeln(item.unitPrice.toStringAsFixed(2))
+        ..writeln(item.totalPrice.toStringAsFixed(2));
+    }
+    // Only include tax fields in hash when non-zero so existing archived
+    // receipts (created before these fields existed) still verify.
+    if (receipt.taxAmount != 0) {
+      content.writeln('tax=${receipt.taxAmount.toStringAsFixed(2)}');
+    }
+    if (receipt.serviceChargeAmount != 0) {
+      content.writeln('svc=${receipt.serviceChargeAmount.toStringAsFixed(2)}');
+    }
 
     final bytes = <int>[...utf8.encode(content.toString())];
     if (archivedImagePath != null && File(archivedImagePath).existsSync()) {
@@ -514,7 +586,7 @@ class LocalStorageService {
       final normalizedReceipt = receipt.copyWith(
         imagePath: archivedImagePath ?? receipt.imagePath,
       );
-      final hash = await _computeReceiptHash(
+      final hash = await computeReceiptHash(
         normalizedReceipt,
         archivedImagePath,
       );

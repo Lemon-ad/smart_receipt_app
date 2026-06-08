@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/archive_provider.dart';
 import '../providers/receipt_provider.dart';
+import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/app_card.dart';
@@ -19,6 +20,9 @@ class ReceiptDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final receipt = ref.watch(receiptByIdProvider(receiptId));
     final archive = ref.watch(archiveByReceiptIdProvider(receiptId));
+    final prefs = ref.watch(preferencesProvider);
+    final dateFormat = prefs.dateFormat;
+    final currency = prefs.currency;
     if (receipt == null) {
       return const Scaffold(body: Center(child: Text('Receipt not found')));
     }
@@ -40,12 +44,12 @@ class ReceiptDetailScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  shortDate(receipt.date),
+                  shortDate(receipt.date, format: dateFormat),
                   style: const TextStyle(color: AppTheme.muted),
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  money(receipt.totalAmount),
+                  money(receipt.totalAmount, currency: currency),
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.w900,
                     color: AppTheme.green,
@@ -55,6 +59,58 @@ class ReceiptDetailScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 14),
+          if (receipt.items.isNotEmpty)
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Items',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 8),
+                  ...receipt.items.map(
+                    (item) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${item.quantity == item.quantity.truncateToDouble() ? item.quantity.toStringAsFixed(0) : item.quantity.toStringAsFixed(2)}x ${item.name}',
+                            ),
+                          ),
+                          Text(
+                            money(item.totalPrice, currency: currency),
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Divider(),
+                  _Info('Subtotal', money(receipt.items.fold(0.0, (sum, i) => sum + i.totalPrice), currency: currency)),
+                  if (receipt.taxAmount > 0)
+                    _Info('Tax (SST/GST)', money(receipt.taxAmount, currency: currency)),
+                  if (receipt.serviceChargeAmount > 0)
+                    _Info('Service charge', money(receipt.serviceChargeAmount, currency: currency)),
+                  const Divider(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Total',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      Text(
+                        money(receipt.totalAmount, currency: currency),
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          if (receipt.items.isNotEmpty) const SizedBox(height: 14),
           AppCard(
             child: Column(
               children: [
@@ -65,6 +121,10 @@ class ReceiptDetailScreen extends ConsumerWidget {
                   'Tags',
                   receipt.tags.isEmpty ? 'None' : receipt.tags.join(', '),
                 ),
+                if (receipt.taxAmount > 0)
+                  _Info('Tax', money(receipt.taxAmount, currency: currency)),
+                if (receipt.serviceChargeAmount > 0)
+                  _Info('Service charge', money(receipt.serviceChargeAmount, currency: currency)),
                 _Info('Source', receipt.sourceType),
                 _Info(
                   'Archive',
