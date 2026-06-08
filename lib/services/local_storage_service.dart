@@ -148,6 +148,16 @@ class LocalStorageService {
     await _ownerships.delete(id);
   }
 
+  Future<void> deleteReceipts(List<String> ids) async {
+    for (final id in ids) {
+      try {
+        await deleteReceipt(id);
+      } catch (error) {
+        debugPrint('[Storage] Skipped delete for id=$id error=$error');
+      }
+    }
+  }
+
   Future<void> upsertTransaction(ImportedTransaction transaction) =>
       _transactions.put(transaction.id, transaction);
 

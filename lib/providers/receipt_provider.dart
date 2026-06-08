@@ -37,6 +37,15 @@ class ReceiptsNotifier extends Notifier<List<Receipt>> {
     );
     ref.invalidate(archivesProvider);
   }
+
+  Future<void> removeMany(List<String> ids) async {
+    await _storage.deleteReceipts(ids);
+    state = _storage.receipts;
+    debugPrint(
+      '[ReceiptsProvider] Removed ${ids.length} receipts. visibleCount=${state.length}',
+    );
+    ref.invalidate(archivesProvider);
+  }
 }
 
 final receiptByIdProvider = Provider.family<Receipt?, String>((ref, id) {

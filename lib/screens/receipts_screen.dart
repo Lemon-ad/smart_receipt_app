@@ -25,6 +25,55 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
   String _summaryPeriod = 'Monthly';
   final _chips = const ['All', 'Personal', 'Business', 'This Month', 'Travel'];
   final _summaryPeriods = const ['Weekly', 'Monthly', 'Yearly'];
+  final Set<String> _selected = {};
+
+  bool get _isSelecting => _selected.isNotEmpty;
+
+  void _enterSelection(String id) {
+    setState(() => _selected.add(id));
+  }
+
+  void _toggleSelection(String id) {
+    setState(() {
+      if (_selected.contains(id)) {
+        _selected.remove(id);
+      } else {
+        _selected.add(id);
+      }
+    });
+  }
+
+  void _clearSelection() => setState(_selected.clear);
+
+  Future<void> _deleteSelected() async {
+    final count = _selected.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete receipts?'),
+        content: Text('Permanently delete $count receipt${count == 1 ? '' : 's'}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: AppTheme.rose)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await ref.read(receiptsProvider.notifier).removeMany(_selected.toList());
+      if (mounted) {
+        setState(_selected.clear);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$count receipt${count == 1 ? '' : 's'} deleted')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -126,29 +175,49 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Receipts',
-          style: TextStyle(fontWeight: FontWeight.w900),
-        ),
+        title: _isSelecting
+            ? Text(
+                '${_selected.length} selected',
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              )
+            : const Text(
+                'Receipts',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+        leading: _isSelecting
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: _clearSelection,
+              )
+            : null,
         actions: [
-          SoftIconButton(
-            icon: Icons.edit_note,
-            tooltip: 'Add manually',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const ReceiptReviewScreen(manualEntry: true),
+          if (_isSelecting) ...[
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: AppTheme.rose),
+              tooltip: 'Delete selected',
+              onPressed: _deleteSelected,
+            ),
+            const SizedBox(width: 8),
+          ] else ...[
+            SoftIconButton(
+              icon: Icons.edit_note,
+              tooltip: 'Add manually',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const ReceiptReviewScreen(manualEntry: true),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          SoftIconButton(
-            icon: Icons.upload_file,
-            tooltip: 'Import statement',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const StatementImportScreen()),
+            const SizedBox(width: 8),
+            SoftIconButton(
+              icon: Icons.upload_file,
+              tooltip: 'Import statement',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const StatementImportScreen()),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
+            const SizedBox(width: 12),
+          ],
         ],
       ),
       body: ListView(
@@ -222,7 +291,10 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
               return ChoiceChip(
                 label: Text(chip),
                 selected: _chip == chip,
-                onSelected: (_) => setState(() => _chip = chip),
+                onSelected: (_) => setState(() {
+                  _chip = chip;
+                  _selected.clear();
+                }),
               );
             }).toList(),
           ),
@@ -245,12 +317,19 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
                   ...entry.value.map(
                     (receipt) => ReceiptTile(
                       receipt: receipt,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              ReceiptDetailScreen(receiptId: receipt.id),
-                        ),
-                      ),
+                      isSelectionMode: _isSelecting,
+                      isSelected: _selected.contains(receipt.id),
+                      onTap: _isSelecting
+                          ? () => _toggleSelection(receipt.id)
+                          : () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      ReceiptDetailScreen(receiptId: receipt.id),
+                                ),
+                              ),
+                      onLongPress: _isSelecting
+                          ? null
+                          : () => _enterSelection(receipt.id),
                     ),
                   ),
                 ],

@@ -7,10 +7,20 @@ import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 
 class ReceiptTile extends ConsumerWidget {
-  const ReceiptTile({super.key, required this.receipt, required this.onTap});
+  const ReceiptTile({
+    super.key,
+    required this.receipt,
+    required this.onTap,
+    this.onLongPress,
+    this.isSelected = false,
+    this.isSelectionMode = false,
+  });
 
   final Receipt receipt;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final bool isSelected;
+  final bool isSelectionMode;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -19,20 +29,39 @@ class ReceiptTile extends ConsumerWidget {
 
     return ListTile(
       onTap: onTap,
+      onLongPress: onLongPress,
       contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-      leading: Container(
-        width: 48,
-        height: 48,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppTheme.accent.withValues(alpha: .18),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppTheme.accent.withValues(alpha: .35)),
-        ),
-        child: Text(
-          initials(receipt.merchantName),
-          style: const TextStyle(fontWeight: FontWeight.w900),
-        ),
+      leading: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isSelectionMode)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: Checkbox(
+                  value: isSelected,
+                  onChanged: (_) => onTap(),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
+          Container(
+            width: 48,
+            height: 48,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppTheme.accent.withValues(alpha: .18),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.accent.withValues(alpha: .35)),
+            ),
+            child: Text(
+              initials(receipt.merchantName),
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
       ),
       title: Row(
         children: [
