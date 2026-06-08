@@ -515,6 +515,14 @@ class LocalStorageService {
         ..writeln(item.unitPrice.toStringAsFixed(2))
         ..writeln(item.totalPrice.toStringAsFixed(2));
     }
+    // Only include tax fields in hash when non-zero so existing archived
+    // receipts (created before these fields existed) still verify.
+    if (receipt.taxAmount != 0) {
+      content.writeln('tax=${receipt.taxAmount.toStringAsFixed(2)}');
+    }
+    if (receipt.serviceChargeAmount != 0) {
+      content.writeln('svc=${receipt.serviceChargeAmount.toStringAsFixed(2)}');
+    }
 
     final bytes = <int>[...utf8.encode(content.toString())];
     if (archivedImagePath != null && File(archivedImagePath).existsSync()) {

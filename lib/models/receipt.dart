@@ -31,6 +31,8 @@ class Receipt {
     required this.createdAt,
     required this.updatedAt,
     this.items = const [],
+    this.taxAmount = 0.0,
+    this.serviceChargeAmount = 0.0,
   });
 
   final String id;
@@ -48,6 +50,8 @@ class Receipt {
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<ReceiptItem> items;
+  final double taxAmount;
+  final double serviceChargeAmount;
 
   Receipt copyWith({
     String? id,
@@ -65,6 +69,8 @@ class Receipt {
     DateTime? createdAt,
     DateTime? updatedAt,
     List<ReceiptItem>? items,
+    double? taxAmount,
+    double? serviceChargeAmount,
   }) {
     return Receipt(
       id: id ?? this.id,
@@ -82,6 +88,8 @@ class Receipt {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       items: items ?? this.items,
+      taxAmount: taxAmount ?? this.taxAmount,
+      serviceChargeAmount: serviceChargeAmount ?? this.serviceChargeAmount,
     );
   }
 }
@@ -116,7 +124,7 @@ class ReceiptAdapter extends TypeAdapter<Receipt> {
 
   @override
   Receipt read(BinaryReader reader) {
-    return Receipt(
+    final receipt = Receipt(
       id: reader.readString(),
       merchantName: reader.readString(),
       date: DateTime.parse(reader.readString()),
@@ -132,6 +140,17 @@ class ReceiptAdapter extends TypeAdapter<Receipt> {
       createdAt: DateTime.parse(reader.readString()),
       updatedAt: DateTime.parse(reader.readString()),
       items: (reader.readList()).cast<ReceiptItem>(),
+    );
+    // Backward compatibility: old boxes don't have tax fields.
+    var taxAmount = 0.0;
+    var serviceChargeAmount = 0.0;
+    try {
+      taxAmount = reader.readDouble();
+      serviceChargeAmount = reader.readDouble();
+    } catch (_) {}
+    return receipt.copyWith(
+      taxAmount: taxAmount,
+      serviceChargeAmount: serviceChargeAmount,
     );
   }
 
@@ -152,6 +171,8 @@ class ReceiptAdapter extends TypeAdapter<Receipt> {
       ..writeString(obj.sourceType)
       ..writeString(obj.createdAt.toIso8601String())
       ..writeString(obj.updatedAt.toIso8601String())
-      ..writeList(obj.items);
+      ..writeList(obj.items)
+      ..writeDouble(obj.taxAmount)
+      ..writeDouble(obj.serviceChargeAmount);
   }
 }

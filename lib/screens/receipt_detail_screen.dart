@@ -84,17 +84,21 @@ class ReceiptDetailScreen extends ConsumerWidget {
                     ),
                   ),
                   const Divider(),
+                  _Info('Subtotal', money(receipt.items.fold(0.0, (sum, i) => sum + i.totalPrice))),
+                  if (receipt.taxAmount > 0)
+                    _Info('Tax (SST/GST)', money(receipt.taxAmount)),
+                  if (receipt.serviceChargeAmount > 0)
+                    _Info('Service charge', money(receipt.serviceChargeAmount)),
+                  const Divider(),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Total'),
+                      const Text(
+                        'Total',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
                       Text(
-                        money(
-                          receipt.items.fold(
-                            0.0,
-                            (sum, i) => sum + i.totalPrice,
-                          ),
-                        ),
+                        money(receipt.totalAmount),
                         style: const TextStyle(fontWeight: FontWeight.w900),
                       ),
                     ],
@@ -113,6 +117,10 @@ class ReceiptDetailScreen extends ConsumerWidget {
                   'Tags',
                   receipt.tags.isEmpty ? 'None' : receipt.tags.join(', '),
                 ),
+                if (receipt.taxAmount > 0)
+                  _Info('Tax', money(receipt.taxAmount)),
+                if (receipt.serviceChargeAmount > 0)
+                  _Info('Service charge', money(receipt.serviceChargeAmount)),
                 _Info('Source', receipt.sourceType),
                 _Info(
                   'Archive',
