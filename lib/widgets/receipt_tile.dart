@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/receipt.dart';
 import '../providers/archive_provider.dart';
+import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 
@@ -26,6 +27,7 @@ class ReceiptTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final archive = ref.watch(archiveByReceiptIdProvider(receipt.id));
     final hasLinks = archive?.linkedStatementRefs.isNotEmpty ?? false;
+    final currency = ref.watch(preferencesProvider).currency;
 
     return ListTile(
       onTap: onTap,
@@ -74,7 +76,7 @@ class ReceiptTile extends ConsumerWidget {
             ),
           ),
           Text(
-            money(receipt.totalAmount),
+            money(receipt.totalAmount, currency: currency),
             style: const TextStyle(fontWeight: FontWeight.w900),
           ),
         ],

@@ -20,7 +20,9 @@ class ReceiptDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final receipt = ref.watch(receiptByIdProvider(receiptId));
     final archive = ref.watch(archiveByReceiptIdProvider(receiptId));
-    final dateFormat = ref.watch(preferencesProvider).dateFormat;
+    final prefs = ref.watch(preferencesProvider);
+    final dateFormat = prefs.dateFormat;
+    final currency = prefs.currency;
     if (receipt == null) {
       return const Scaffold(body: Center(child: Text('Receipt not found')));
     }
@@ -47,7 +49,7 @@ class ReceiptDetailScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  money(receipt.totalAmount),
+                  money(receipt.totalAmount, currency: currency),
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.w900,
                     color: AppTheme.green,
@@ -78,7 +80,7 @@ class ReceiptDetailScreen extends ConsumerWidget {
                             ),
                           ),
                           Text(
-                            money(item.totalPrice),
+                            money(item.totalPrice, currency: currency),
                             style: const TextStyle(fontWeight: FontWeight.w800),
                           ),
                         ],
@@ -86,11 +88,11 @@ class ReceiptDetailScreen extends ConsumerWidget {
                     ),
                   ),
                   const Divider(),
-                  _Info('Subtotal', money(receipt.items.fold(0.0, (sum, i) => sum + i.totalPrice))),
+                  _Info('Subtotal', money(receipt.items.fold(0.0, (sum, i) => sum + i.totalPrice), currency: currency)),
                   if (receipt.taxAmount > 0)
-                    _Info('Tax (SST/GST)', money(receipt.taxAmount)),
+                    _Info('Tax (SST/GST)', money(receipt.taxAmount, currency: currency)),
                   if (receipt.serviceChargeAmount > 0)
-                    _Info('Service charge', money(receipt.serviceChargeAmount)),
+                    _Info('Service charge', money(receipt.serviceChargeAmount, currency: currency)),
                   const Divider(),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -100,7 +102,7 @@ class ReceiptDetailScreen extends ConsumerWidget {
                         style: TextStyle(fontWeight: FontWeight.w900),
                       ),
                       Text(
-                        money(receipt.totalAmount),
+                        money(receipt.totalAmount, currency: currency),
                         style: const TextStyle(fontWeight: FontWeight.w900),
                       ),
                     ],
@@ -120,9 +122,9 @@ class ReceiptDetailScreen extends ConsumerWidget {
                   receipt.tags.isEmpty ? 'None' : receipt.tags.join(', '),
                 ),
                 if (receipt.taxAmount > 0)
-                  _Info('Tax', money(receipt.taxAmount)),
+                  _Info('Tax', money(receipt.taxAmount, currency: currency)),
                 if (receipt.serviceChargeAmount > 0)
-                  _Info('Service charge', money(receipt.serviceChargeAmount)),
+                  _Info('Service charge', money(receipt.serviceChargeAmount, currency: currency)),
                 _Info('Source', receipt.sourceType),
                 _Info(
                   'Archive',

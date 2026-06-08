@@ -88,7 +88,7 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
 
       final match = _findMatch(tx, receipts);
       final sourceRef =
-          '${tx.sourceFileName} · ${shortDate(tx.date, format: prefs.dateFormat)} · ${money(tx.amount)}';
+          '${tx.sourceFileName} · ${shortDate(tx.date, format: prefs.dateFormat)} · ${money(tx.amount, currency: prefs.currency)}';
 
       if (match != null && !(storage.archiveFor(match.id)?.isLocked ?? false)) {
         final updated = match.copyWith(
@@ -209,7 +209,7 @@ class _StatementImportScreenState extends ConsumerState<StatementImportScreen> {
                   style: const TextStyle(color: AppTheme.muted),
                 ),
                 secondary: Text(
-                  money(tx.amount),
+                  money(tx.amount, currency: ref.watch(preferencesProvider).currency),
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
               ),

@@ -81,7 +81,9 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
   Widget build(BuildContext context) {
     final receipts = ref.watch(receiptsProvider);
     final filtered = _applyFilters(receipts);
-    final dateFormat = ref.watch(preferencesProvider).dateFormat;
+    final prefs = ref.watch(preferencesProvider);
+    final dateFormat = prefs.dateFormat;
+    final currency = prefs.currency;
     final now = DateTime.now();
     final startOfWeek = DateTime(
       now.year,
@@ -223,9 +225,12 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
           ],
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-        children: [
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        behavior: HitTestBehavior.translucent,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+          children: [
           Text(
             monthLabel(now, format: dateFormat),
             style: const TextStyle(
@@ -236,7 +241,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
           const SizedBox(height: 14),
           _SummaryCard(
             title: summary.title,
-            amount: money(summary.amount),
+            amount: money(summary.amount, currency: currency),
             primaryMetricLabel: summary.compareLabel,
             primaryMetricValue:
                 '${summary.diff >= 0 ? '+' : ''}${summary.diff.toStringAsFixed(1)}%',
@@ -368,6 +373,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 

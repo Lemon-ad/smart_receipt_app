@@ -371,6 +371,7 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
   }
 
   Widget _buildItemsCard() {
+    final currency = ref.read(preferencesProvider).currency;
     final itemsSum = _items.fold(0.0, (sum, i) => sum + i.totalPrice);
     final tax = double.tryParse(_tax.text.trim()) ?? 0;
     final serviceCharge = double.tryParse(_serviceCharge.text.trim()) ?? 0;
@@ -409,7 +410,7 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
                 dense: true,
                 title: Text(item.name),
                 subtitle: Text(
-                  '${item.quantity == item.quantity.truncateToDouble() ? item.quantity.toStringAsFixed(0) : item.quantity.toStringAsFixed(2)}x @ ${money(item.unitPrice)} = ${money(item.totalPrice)}',
+                  '${item.quantity == item.quantity.truncateToDouble() ? item.quantity.toStringAsFixed(0) : item.quantity.toStringAsFixed(2)}x @ ${money(item.unitPrice, currency: currency)} = ${money(item.totalPrice, currency: currency)}',
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -431,16 +432,18 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
               );
             }),
           const Divider(),
-          _BreakdownRow(label: 'Subtotal', value: itemsSum),
+          _BreakdownRow(label: 'Subtotal', value: itemsSum, currency: currency),
           _BreakdownRow(
             label: 'Tax (SST/GST)',
             value: tax,
+            currency: currency,
             controller: _tax,
             onChanged: () => setState(() {}),
           ),
           _BreakdownRow(
             label: 'Service charge',
             value: serviceCharge,
+            currency: currency,
             controller: _serviceCharge,
             onChanged: () => setState(() {}),
           ),
@@ -453,7 +456,7 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    money(calculated),
+                    money(calculated, currency: currency),
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
                       color: matches ? AppTheme.green : AppTheme.rose,
@@ -516,12 +519,14 @@ class _BreakdownRow extends StatelessWidget {
   const _BreakdownRow({
     required this.label,
     required this.value,
+    required this.currency,
     this.controller,
     this.onChanged,
   });
 
   final String label;
   final double value;
+  final String currency;
   final TextEditingController? controller;
   final VoidCallback? onChanged;
 
@@ -564,7 +569,7 @@ class _BreakdownRow extends StatelessWidget {
         children: [
           Text(label, style: const TextStyle(color: AppTheme.muted)),
           Text(
-            money(value),
+            money(value, currency: currency),
             style: const TextStyle(fontWeight: FontWeight.w800),
           ),
         ],

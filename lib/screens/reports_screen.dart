@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/receipt.dart';
 import '../providers/archive_provider.dart';
 import '../providers/report_provider.dart';
+import '../providers/settings_provider.dart';
 import '../services/export_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
@@ -17,6 +18,7 @@ class ReportsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final receipts = ref.watch(filteredReportReceiptsProvider);
     final total = receipts.fold<double>(0, (sum, r) => sum + r.totalAmount);
+    final currency = ref.watch(preferencesProvider).currency;
     final range = ref.watch(reportRangeProvider);
     final customRange = ref.watch(reportCustomRangeProvider);
     final trend = ref.watch(reportTrendProvider);
@@ -121,14 +123,14 @@ class ReportsScreen extends ConsumerWidget {
             mainAxisSpacing: 12,
             childAspectRatio: 1.5,
             children: [
-              _Summary(label: 'Total spending', value: money(total)),
+              _Summary(label: 'Total spending', value: money(total, currency: currency)),
               _Summary(label: 'Highest category', value: highestCategory),
               _Summary(label: 'Receipt count', value: '${receipts.length}'),
               _Summary(
                 label: 'Average spend',
                 value: receipts.isEmpty
-                    ? money(0)
-                    : money(total / receipts.length),
+                    ? money(0, currency: currency)
+                    : money(total / receipts.length, currency: currency),
               ),
             ],
           ),
@@ -159,7 +161,7 @@ class ReportsScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${money(trend['current'] as double)} this period · ${money(trend['previous'] as double)} last period',
+                          '${money(trend['current'] as double, currency: currency)} this period · ${money(trend['previous'] as double, currency: currency)} last period',
                           style: const TextStyle(
                             color: AppTheme.muted,
                             fontSize: 12,
@@ -228,6 +230,7 @@ class ReportsScreen extends ConsumerWidget {
                                 Expanded(
                                   child: _CategoryLegend(
                                     categoryEntries: categoryEntries,
+                                    currency: currency,
                                   ),
                                 ),
                               ],
@@ -247,6 +250,7 @@ class ReportsScreen extends ConsumerWidget {
                                 Expanded(
                                   child: _CategoryLegend(
                                     categoryEntries: categoryEntries,
+                                    currency: currency,
                                   ),
                                 ),
                               ],
@@ -384,7 +388,7 @@ class ReportsScreen extends ConsumerWidget {
                     Expanded(
                       child: _SplitLegend(
                         label: 'Business',
-                        amount: money(business),
+                        amount: money(business, currency: currency),
                         color: AppTheme.accent,
                         alignment: CrossAxisAlignment.start,
                       ),
@@ -392,7 +396,7 @@ class ReportsScreen extends ConsumerWidget {
                     Expanded(
                       child: _SplitLegend(
                         label: 'Personal',
-                        amount: money(personal),
+                        amount: money(personal, currency: currency),
                         color: AppTheme.green,
                         alignment: CrossAxisAlignment.end,
                       ),
@@ -734,9 +738,13 @@ class _CategoryDonut extends StatelessWidget {
 }
 
 class _CategoryLegend extends StatelessWidget {
-  const _CategoryLegend({required this.categoryEntries});
+  const _CategoryLegend({
+    required this.categoryEntries,
+    required this.currency,
+  });
 
   final List<MapEntry<String, double>> categoryEntries;
+  final String currency;
 
   @override
   Widget build(BuildContext context) {
@@ -767,7 +775,7 @@ class _CategoryLegend extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  money(entry.value.value),
+                  money(entry.value.value, currency: currency),
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
               ],
