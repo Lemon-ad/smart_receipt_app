@@ -108,9 +108,8 @@ class ReportsScreen extends ConsumerWidget {
               return ChoiceChip(
                 label: Text(_typeLabel(f)),
                 selected: selected,
-                onSelected: (_) => ref
-                    .read(reportTypeFilterProvider.notifier)
-                    .setFilter(f),
+                onSelected: (_) =>
+                    ref.read(reportTypeFilterProvider.notifier).setFilter(f),
               );
             }).toList(),
           ),
@@ -123,7 +122,10 @@ class ReportsScreen extends ConsumerWidget {
             mainAxisSpacing: 12,
             childAspectRatio: 1.5,
             children: [
-              _Summary(label: 'Total spending', value: money(total, currency: currency)),
+              _Summary(
+                label: 'Total spending',
+                value: money(total, currency: currency),
+              ),
               _Summary(label: 'Highest category', value: highestCategory),
               _Summary(label: 'Receipt count', value: '${receipts.length}'),
               _Summary(
@@ -313,22 +315,32 @@ class ReportsScreen extends ConsumerWidget {
                         bottomTitles: AxisTitles(
                           sideTitles: SideTitles(
                             showTitles: true,
-                            reservedSize: 28,
-                            interval: monthlySeries.length > 12
-                                ? (monthlySeries.length / 6)
-                                    .ceil()
-                                    .toDouble()
-                                : 1,
+                            reservedSize: 44,
+                            interval: 1,
                             getTitlesWidget: (value, meta) {
                               final index = value.toInt();
                               if (index < 0 || index >= monthlySeries.length) {
+                                return const SizedBox.shrink();
+                              }
+                              final step = _bottomLabelStep(
+                                monthlySeries.length,
+                              );
+                              final isLast = index == monthlySeries.length - 1;
+                              if (index % step != 0 && !isLast) {
                                 return const SizedBox.shrink();
                               }
                               return Padding(
                                 padding: const EdgeInsets.only(top: 10),
                                 child: Text(
                                   monthlySeries[index].label,
-                                  style: const TextStyle(color: AppTheme.muted),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.visible,
+                                  style: const TextStyle(
+                                    color: AppTheme.muted,
+                                    fontSize: 11,
+                                    height: 1.15,
+                                  ),
                                 ),
                               );
                             },
@@ -337,8 +349,12 @@ class ReportsScreen extends ConsumerWidget {
                       ),
                       barGroups: _monthlyBars(
                         monthlySeries,
-                        showLabels: monthlySeries.length <= 10,
-                        width: monthlySeries.length > 12 ? 14 : 40,
+                        showLabels: monthlySeries.length <= 6,
+                        width: monthlySeries.length > 10
+                            ? 18
+                            : monthlySeries.length > 6
+                            ? 26
+                            : 40,
                       ),
                     ),
                   ),
@@ -459,32 +475,34 @@ class ReportsScreen extends ConsumerWidget {
     switch (range) {
       case ReportRange.thisMonth:
         final start = DateTime(now.year, now.month);
-        final daysInMonth =
-            DateTime(now.year, now.month + 1).difference(start).inDays;
+        final daysInMonth = DateTime(
+          now.year,
+          now.month + 1,
+        ).difference(start).inDays;
         final weeks = (daysInMonth / 7).ceil();
         return List.generate(weeks, (index) {
           final weekStart = start.add(Duration(days: index * 7));
           final weekEnd = weekStart.add(const Duration(days: 6));
           final value = receipts
               .where(
-                (r) =>
-                    !r.date.isBefore(weekStart) && !r.date.isAfter(weekEnd),
+                (r) => !r.date.isBefore(weekStart) && !r.date.isAfter(weekEnd),
               )
               .fold<double>(0, (sum, r) => sum + r.totalAmount);
           return _MonthlyPoint(label: 'W${index + 1}', value: value);
         });
       case ReportRange.lastMonth:
         final start = DateTime(now.year, now.month - 1);
-        final daysInMonth =
-            DateTime(now.year, now.month).difference(start).inDays;
+        final daysInMonth = DateTime(
+          now.year,
+          now.month,
+        ).difference(start).inDays;
         final weeks = (daysInMonth / 7).ceil();
         return List.generate(weeks, (index) {
           final weekStart = start.add(Duration(days: index * 7));
           final weekEnd = weekStart.add(const Duration(days: 6));
           final value = receipts
               .where(
-                (r) =>
-                    !r.date.isBefore(weekStart) && !r.date.isAfter(weekEnd),
+                (r) => !r.date.isBefore(weekStart) && !r.date.isAfter(weekEnd),
               )
               .fold<double>(0, (sum, r) => sum + r.totalAmount);
           return _MonthlyPoint(label: 'W${index + 1}', value: value);
@@ -494,8 +512,7 @@ class ReportsScreen extends ConsumerWidget {
           final date = DateTime(now.year, now.month - 2 + index);
           final value = receipts
               .where(
-                (r) =>
-                    r.date.year == date.year && r.date.month == date.month,
+                (r) => r.date.year == date.year && r.date.month == date.month,
               )
               .fold<double>(0, (sum, r) => sum + r.totalAmount);
           return _MonthlyPoint(label: monthShort(date), value: value);
@@ -506,9 +523,7 @@ class ReportsScreen extends ConsumerWidget {
             final date = DateTime(now.year, now.month - 5 + index);
             final value = receipts
                 .where(
-                  (r) =>
-                      r.date.year == date.year &&
-                      r.date.month == date.month,
+                  (r) => r.date.year == date.year && r.date.month == date.month,
                 )
                 .fold<double>(0, (sum, r) => sum + r.totalAmount);
             return _MonthlyPoint(label: monthShort(date), value: value);
@@ -517,7 +532,7 @@ class ReportsScreen extends ConsumerWidget {
         final start = customRange.$1;
         final end = customRange.$2;
         final days = end.difference(start).inDays + 1;
-        if (days <= 31) {
+        if (days <= 7) {
           return List.generate(days, (index) {
             final date = start.add(Duration(days: index));
             final value = receipts
@@ -533,26 +548,137 @@ class ReportsScreen extends ConsumerWidget {
               value: value,
             );
           });
-        } else {
-          final months = <_MonthlyPoint>[];
-          var current = DateTime(start.year, start.month);
-          final endMonth = DateTime(end.year, end.month);
-          while (!current.isAfter(endMonth)) {
-            final value = receipts
-                .where(
-                  (r) =>
-                      r.date.year == current.year &&
-                      r.date.month == current.month,
-                )
-                .fold<double>(0, (sum, r) => sum + r.totalAmount);
-            months.add(
-              _MonthlyPoint(label: monthShort(current), value: value),
-            );
-            current = DateTime(current.year, current.month + 1);
-          }
-          return months;
         }
+        if (days <= 21) {
+          return _groupByFixedDayBuckets(
+            receipts,
+            start,
+            end,
+            bucketSize: 7,
+            labelBuilder: (bucketEnd, bucketStart, index) =>
+                _weekBucketLabel(index, bucketStart, bucketEnd),
+          );
+        }
+        if (days <= 31) {
+          return _groupByFixedDayBuckets(
+            receipts,
+            start,
+            end,
+            bucketSize: (days / 4).ceil(),
+            labelBuilder: (bucketEnd, bucketStart, index) =>
+                _weekBucketLabel(index, bucketStart, bucketEnd),
+          );
+        }
+        if (days <= 62) {
+          return _groupByFixedDayBuckets(
+            receipts,
+            start,
+            end,
+            bucketSize: 7,
+            labelBuilder: (_, bucketStart, index) =>
+                '${monthShort(bucketStart)}/${index + 1}',
+          );
+        }
+        if (days <= 730) {
+          return _groupByMonths(receipts, start, end);
+        }
+        if (days <= 1460) {
+          return _groupByQuarters(receipts, start, end);
+        }
+        return _groupByYears(receipts, start, end);
     }
+  }
+
+  List<_MonthlyPoint> _groupByFixedDayBuckets(
+    List<Receipt> receipts,
+    DateTime start,
+    DateTime end, {
+    required int bucketSize,
+    required String Function(
+      DateTime bucketEnd,
+      DateTime bucketStart,
+      int index,
+    )
+    labelBuilder,
+  }) {
+    final points = <_MonthlyPoint>[];
+    var bucketStart = start;
+    var index = 0;
+    while (!bucketStart.isAfter(end)) {
+      final candidateEnd = bucketStart.add(Duration(days: bucketSize - 1));
+      final bucketEnd = candidateEnd.isAfter(end) ? end : candidateEnd;
+      final value = receipts
+          .where(
+            (r) => !r.date.isBefore(bucketStart) && !r.date.isAfter(bucketEnd),
+          )
+          .fold<double>(0, (sum, r) => sum + r.totalAmount);
+      points.add(
+        _MonthlyPoint(
+          label: labelBuilder(bucketEnd, bucketStart, index),
+          value: value,
+        ),
+      );
+      bucketStart = bucketEnd.add(const Duration(days: 1));
+      index++;
+    }
+    return points;
+  }
+
+  List<_MonthlyPoint> _groupByMonths(
+    List<Receipt> receipts,
+    DateTime start,
+    DateTime end,
+  ) {
+    final months = <_MonthlyPoint>[];
+    var current = DateTime(start.year, start.month);
+    final endMonth = DateTime(end.year, end.month);
+    while (!current.isAfter(endMonth)) {
+      final value = receipts
+          .where(
+            (r) => r.date.year == current.year && r.date.month == current.month,
+          )
+          .fold<double>(0, (sum, r) => sum + r.totalAmount);
+      months.add(_MonthlyPoint(label: monthShort(current), value: value));
+      current = DateTime(current.year, current.month + 1);
+    }
+    return months;
+  }
+
+  List<_MonthlyPoint> _groupByQuarters(
+    List<Receipt> receipts,
+    DateTime start,
+    DateTime end,
+  ) {
+    final points = <_MonthlyPoint>[];
+    var current = DateTime(start.year, ((start.month - 1) ~/ 3) * 3 + 1);
+    while (!current.isAfter(end)) {
+      final quarterEnd = DateTime(current.year, current.month + 3, 0);
+      final value = receipts
+          .where(
+            (r) => !r.date.isBefore(current) && !r.date.isAfter(quarterEnd),
+          )
+          .fold<double>(0, (sum, r) => sum + r.totalAmount);
+      final quarter = ((current.month - 1) ~/ 3) + 1;
+      points.add(_MonthlyPoint(label: 'Q$quarter', value: value));
+      current = DateTime(current.year, current.month + 3);
+    }
+    return points;
+  }
+
+  List<_MonthlyPoint> _groupByYears(
+    List<Receipt> receipts,
+    DateTime start,
+    DateTime end,
+  ) {
+    return [
+      for (var year = start.year; year <= end.year; year++)
+        _MonthlyPoint(
+          label: '$year',
+          value: receipts
+              .where((r) => r.date.year == year)
+              .fold<double>(0, (sum, r) => sum + r.totalAmount),
+        ),
+    ];
   }
 
   List<BarChartGroupData> _monthlyBars(
@@ -600,21 +726,35 @@ class ReportsScreen extends ConsumerWidget {
 
   double _chartInterval(List<_MonthlyPoint> points) => _maxChartY(points) / 4;
 
-  String _rangeLabel(ReportRange range, (DateTime, DateTime)? custom) =>
-      switch (range) {
-        ReportRange.thisMonth => 'This Month',
-        ReportRange.lastMonth => 'Last Month',
-        ReportRange.quarter => 'Quarter',
-        ReportRange.custom => custom != null
-            ? '${custom.$1.day}/${custom.$1.month}–${custom.$2.day}/${custom.$2.month}'
-            : 'Custom',
-      };
+  int _bottomLabelStep(int pointCount) {
+    if (pointCount <= 4) return 1;
+    if (pointCount <= 6) return 2;
+    if (pointCount <= 8) return 2;
+    return (pointCount / 4).ceil();
+  }
+
+  String _weekBucketLabel(int index, DateTime bucketStart, DateTime bucketEnd) {
+    return 'W${index + 1}\n${bucketStart.day}/${bucketStart.month}-${bucketEnd.day}/${bucketEnd.month}';
+  }
+
+  String _rangeLabel(
+    ReportRange range,
+    (DateTime, DateTime)? custom,
+  ) => switch (range) {
+    ReportRange.thisMonth => 'This Month',
+    ReportRange.lastMonth => 'Last Month',
+    ReportRange.quarter => 'Quarter',
+    ReportRange.custom =>
+      custom != null
+          ? '${custom.$1.day}/${custom.$1.month}–${custom.$2.day}/${custom.$2.month}'
+          : 'Custom',
+  };
 
   String _typeLabel(ReportTypeFilter filter) => switch (filter) {
-        ReportTypeFilter.all => 'All',
-        ReportTypeFilter.business => 'Business',
-        ReportTypeFilter.personal => 'Personal',
-      };
+    ReportTypeFilter.all => 'All',
+    ReportTypeFilter.business => 'Business',
+    ReportTypeFilter.personal => 'Personal',
+  };
 
   String _chartTitle(ReportRange range, (DateTime, DateTime)? custom) =>
       switch (range) {
