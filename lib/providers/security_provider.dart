@@ -93,12 +93,16 @@ class SecurityNotifier extends Notifier<SecurityState> {
 
   @override
   SecurityState build() {
+    // This is the auth state layer. It does not talk to secure storage or Hive
+    // directly; instead it coordinates service calls and exposes UI-ready state.
     _service = ref.read(securityServiceProvider);
     _storage = ref.read(localStorageProvider);
     return SecurityState.initial;
   }
 
   Future<void> initialize() async {
+    // Service layer = SecurityService does the real secure work.
+    // State layer = SecurityNotifier stores what the UI should currently show.
     final accounts = await _service.listProfiles();
     final configured = accounts.isNotEmpty;
     final profile = await _service.loadCurrentProfile();
@@ -290,6 +294,8 @@ class SecurityNotifier extends Notifier<SecurityState> {
   }
 
   Future<void> _activateAccount(String accountId) async {
+    // Once auth succeeds, storage also needs to know which account is active so
+    // receipts and archive data can be filtered correctly.
     await _storage.setCurrentAccount(accountId);
   }
 }

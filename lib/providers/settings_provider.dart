@@ -13,6 +13,8 @@ class PreferencesNotifier extends Notifier<UserPreferences> {
 
   @override
   UserPreferences build() {
+    // Preferences are loaded from LocalStorageService rather than talking to
+    // Hive directly from the UI.
     _storage = ref.read(localStorageProvider);
     return _storage.preferences;
   }
@@ -23,16 +25,17 @@ class PreferencesNotifier extends Notifier<UserPreferences> {
   }
 }
 
-final categoriesProvider =
-    NotifierProvider<CategoriesNotifier, List<String>>(
-      CategoriesNotifier.new,
-    );
+final categoriesProvider = NotifierProvider<CategoriesNotifier, List<String>>(
+  CategoriesNotifier.new,
+);
 
 class CategoriesNotifier extends Notifier<List<String>> {
   late LocalStorageService _storage;
 
   @override
   List<String> build() {
+    // Categories and tags are part of the settings layer because they control
+    // the selectable taxonomy used throughout receipts and reports.
     _storage = ref.read(localStorageProvider);
     return _storage.categories;
   }

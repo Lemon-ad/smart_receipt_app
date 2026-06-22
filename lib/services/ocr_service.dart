@@ -6,6 +6,8 @@ import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart
 class OcrService {
   Future<String> extractText(String imagePath) async {
     try {
+      // OCR runs on-device through ML Kit, so receipt text extraction itself
+      // does not need an internet connection.
       if (!File(imagePath).existsSync()) {
         debugPrint(
           '[OCR] Image not found. Using fallback text. path=$imagePath',

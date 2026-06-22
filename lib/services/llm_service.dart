@@ -61,6 +61,8 @@ class LlmService {
   Future<ParsedReceipt> parseReceipt(String ocrText) async {
     if (apiKey.isEmpty) {
       debugPrint('[LLM] No API key configured. Using local heuristic parse.');
+      // The app stays usable offline because it can fall back to local parsing
+      // when the OpenRouter-based AI step is unavailable.
       return _localHeuristicParse(ocrText);
     }
     try {
@@ -132,8 +134,7 @@ class LlmService {
           _amountFromText(ocrText),
       category: (json['category'] ?? 'Food').toString(),
       paymentMethod: (json['paymentMethod'] ?? 'TNG eWallet').toString(),
-      taxAmount:
-          double.tryParse((json['taxAmount'] ?? '0').toString()) ?? 0.0,
+      taxAmount: double.tryParse((json['taxAmount'] ?? '0').toString()) ?? 0.0,
       serviceChargeAmount:
           double.tryParse((json['serviceChargeAmount'] ?? '0').toString()) ??
           0.0,
@@ -152,6 +153,8 @@ class LlmService {
 
   ParsedReceipt _localHeuristicParse(String text) {
     debugPrint('[LLM] Using local heuristic parse.');
+    // This fallback is intentionally simple. It does not replace the LLM, but
+    // it means the scan flow can still produce a usable draft receipt offline.
     final lines = text
         .split(RegExp(r'\r?\n'))
         .where((line) => line.trim().isNotEmpty)
@@ -216,7 +219,9 @@ class LlmService {
           'response_format': {'type': 'json_object'},
         }),
       );
-      debugPrint('[LLM] Statement parse response status=${response.statusCode}');
+      debugPrint(
+        '[LLM] Statement parse response status=${response.statusCode}',
+      );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         debugPrint('[LLM] Statement parse failed. body=${response.body}');
         return [];

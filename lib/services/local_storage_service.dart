@@ -300,6 +300,8 @@ class LocalStorageService {
   Future<void> _openEncryptedBoxes() async {
     // Every box is opened with the same cipher so all app data follows the same
     // local protection policy, not just the receipt box.
+    // Hive boxes are key-value stores: for example receiptId -> Receipt or
+    // 'user' -> UserPreferences depending on the box we are reading/writing.
     _receipts = await Hive.openBox<Receipt>(
       receiptsBoxName,
       encryptionCipher: _cipher,
@@ -386,12 +388,16 @@ class LocalStorageService {
 
   bool _belongsToCurrentAccountId(String receiptId) {
     if (_currentAccountId == null) return false;
+    // The ownerships box is a lightweight map of receiptId -> accountId.
+    // That is what keeps one local user from seeing another user's receipts.
     return _ownerships.get(receiptId) == _currentAccountId;
   }
 
   Future<void> _claimUnownedReceipts(String accountId) async {
     for (final receipt in _receipts.values) {
       if (_ownerships.containsKey(receipt.id)) continue;
+      // Legacy single-user receipts are claimed here so they still become
+      // visible after ownership-by-account was introduced.
       await _ownerships.put(receipt.id, accountId);
     }
   }
