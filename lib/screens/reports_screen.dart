@@ -17,6 +17,8 @@ class ReportsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final receipts = ref.watch(filteredReportReceiptsProvider);
+    // All numbers on this page are derived from the same filtered receipt set,
+    // which keeps the cards, charts, and exports consistent with each other.
     final total = receipts.fold<double>(0, (sum, r) => sum + r.totalAmount);
     final currency = ref.watch(preferencesProvider).currency;
     final range = ref.watch(reportRangeProvider);
@@ -474,6 +476,8 @@ class ReportsScreen extends ConsumerWidget {
 
     switch (range) {
       case ReportRange.thisMonth:
+        // Month views are grouped into week-like bars because daily bars become
+        // too cramped for a compact mobile dashboard.
         final start = DateTime(now.year, now.month);
         final daysInMonth = DateTime(
           now.year,
@@ -508,6 +512,8 @@ class ReportsScreen extends ConsumerWidget {
           return _MonthlyPoint(label: 'W${index + 1}', value: value);
         });
       case ReportRange.quarter:
+        // Quarter view is intentionally shown month-by-month for easier trend
+        // comparison across the last three months.
         return List.generate(3, (index) {
           final date = DateTime(now.year, now.month - 2 + index);
           final value = receipts
@@ -532,6 +538,8 @@ class ReportsScreen extends ConsumerWidget {
         final start = customRange.$1;
         final end = customRange.$2;
         final days = end.difference(start).inDays + 1;
+        // Custom ranges adapt their bucket size so the chart stays readable:
+        // short ranges use days/weeks, wider ranges roll up to months/quarters/years.
         if (days <= 7) {
           return List.generate(days, (index) {
             final date = start.add(Duration(days: index));
@@ -649,6 +657,7 @@ class ReportsScreen extends ConsumerWidget {
     DateTime start,
     DateTime end,
   ) {
+    // Reused helper for custom range chart bucketing.
     final points = <_MonthlyPoint>[];
     var current = DateTime(start.year, ((start.month - 1) ~/ 3) * 3 + 1);
     while (!current.isAfter(end)) {
@@ -727,6 +736,7 @@ class ReportsScreen extends ConsumerWidget {
   double _chartInterval(List<_MonthlyPoint> points) => _maxChartY(points) / 4;
 
   int _bottomLabelStep(int pointCount) {
+    // Skip some labels when there are too many bars to avoid unreadable text.
     if (pointCount <= 4) return 1;
     if (pointCount <= 6) return 2;
     if (pointCount <= 8) return 2;
@@ -734,6 +744,7 @@ class ReportsScreen extends ConsumerWidget {
   }
 
   String _weekBucketLabel(int index, DateTime bucketStart, DateTime bucketEnd) {
+    // Date ranges make W1/W2/W3 understandable during demos and viva.
     return 'W${index + 1}\n${bucketStart.day}/${bucketStart.month}-${bucketEnd.day}/${bucketEnd.month}';
   }
 

@@ -19,6 +19,8 @@ final localStorageProvider = Provider<LocalStorageService>((ref) {
 });
 
 class LocalStorageService {
+  // Keeping separate boxes makes each data concern easier to reason about and
+  // avoids one oversized mixed local schema.
   static const receiptsBoxName = 'receipts';
   static const transactionsBoxName = 'transactions';
   static const settingsBoxName = 'settings';
@@ -41,14 +43,21 @@ class LocalStorageService {
     required Uint8List encryptionKey,
     required bool migrateLegacy,
   }) async {
+    // HiveAesCipher protects the stored box contents at rest on device.
     _cipher = HiveAesCipher(encryptionKey);
     if (migrateLegacy) {
+      // Older installs may have plain local boxes, so we migrate them once into
+      // encrypted boxes instead of losing pre-existing data.
       await _migrateToEncryptedBoxes();
     }
     await _openEncryptedBoxes();
+    // Archive metadata was introduced after the basic receipt model, so older
+    // receipts need a one-time backfill to support verify-hash and sealing.
     await _backfillArchives();
   }
 
+  // Receipts are always filtered by the signed-in account before they reach the
+  // UI, which is how local multi-account support is enforced.
   List<Receipt> get receipts =>
       _receipts.values.where(_belongsToCurrentAccount).toList()
         ..sort((a, b) => b.date.compareTo(a.date));
@@ -77,7 +86,10 @@ class LocalStorageService {
     _currentAccountId = accountId;
     debugPrint('[Storage] Current account set to $_currentAccountId');
     if (accountId != null) {
+      // Unowned legacy receipts are adopted by the first active account so
+      // older single-user data remains visible after the multi-account update.
       await _claimUnownedReceipts(accountId);
+      // Demo records keep dashboards and reports meaningful on a fresh account.
       await _seedAccountIfEmpty(accountId);
       debugPrint(
         '[Storage] Account ready. visibleReceipts=${receipts.length} accountId=$accountId',
@@ -109,13 +121,12 @@ class LocalStorageService {
       receipt.imagePath,
       archive?.archivedImagePath,
     );
+    // Hashing happens after the final normalized payload is prepared so later
+    // integrity checks compare against what was actually persisted.
     final normalizedReceipt = receipt.copyWith(
       imagePath: archivedImagePath ?? receipt.imagePath,
     );
-    final hash = await computeReceiptHash(
-      normalizedReceipt,
-      archivedImagePath,
-    );
+    final hash = await computeReceiptHash(normalizedReceipt, archivedImagePath);
     await _receipts.put(normalizedReceipt.id, normalizedReceipt);
     await _ownerships.put(normalizedReceipt.id, ownerId);
     await _archives.put(
@@ -176,6 +187,8 @@ class LocalStorageService {
       receipt.imagePath,
       archive?.archivedImagePath,
     );
+    // "Locking" a receipt means freezing the archived version used for tax or
+    // compliance-style reference inside the app.
     final hash = await computeReceiptHash(receipt, archivedImagePath);
     await _archives.put(
       receiptId,
@@ -200,6 +213,8 @@ class LocalStorageService {
       receipt,
       archive.archivedImagePath,
     );
+    // A match means neither the structured receipt fields nor the archived
+    // image bytes have changed since the archive hash was recorded.
     final verified = latestHash == archive.sha256Hash;
     await _archives.put(
       receiptId,
@@ -221,6 +236,8 @@ class LocalStorageService {
   }
 
   Future<void> seedIfEmpty() async {
+    // These starter values make the first-run experience less empty while still
+    // allowing users to extend categories and tags later.
     if (_categories.isEmpty) {
       for (final category in [
         'Food',
@@ -247,7 +264,9 @@ class LocalStorageService {
   Future<void> addCategory(String category) async {
     final normalized = category.trim();
     if (normalized.isEmpty) return;
-    if (_categories.values.any((c) => c.toLowerCase() == normalized.toLowerCase())) {
+    if (_categories.values.any(
+      (c) => c.toLowerCase() == normalized.toLowerCase(),
+    )) {
       throw StateError('Category already exists.');
     }
     await _categories.add(normalized);
@@ -279,6 +298,8 @@ class LocalStorageService {
   }
 
   Future<void> _openEncryptedBoxes() async {
+    // Every box is opened with the same cipher so all app data follows the same
+    // local protection policy, not just the receipt box.
     _receipts = await Hive.openBox<Receipt>(
       receiptsBoxName,
       encryptionCipher: _cipher,
@@ -307,6 +328,8 @@ class LocalStorageService {
   }
 
   Future<void> _migrateToEncryptedBoxes() async {
+    // Hive cannot retrofit encryption onto an existing box in place, so the
+    // migration reads the old data, recreates the boxes securely, and writes it back.
     final receipts = await Hive.openBox<Receipt>(receiptsBoxName);
     final transactions = await Hive.openBox<ImportedTransaction>(
       transactionsBoxName,
@@ -374,6 +397,8 @@ class LocalStorageService {
   }
 
   Future<void> _seedAccountIfEmpty(String accountId) async {
+    // These seeded receipts are useful for demoing charts, filters, and export
+    // features without needing to scan several receipts first.
     final hasOwnedReceipts = _ownerships.values.any(
       (owner) => owner == accountId,
     );
@@ -490,6 +515,8 @@ class LocalStorageService {
   }
 
   bool _sameReceiptPayload(Receipt a, Receipt b) {
+    // Locked archive receipts are still allowed to pass through save logic when
+    // nothing meaningful changed, which avoids false integrity errors.
     return a.merchantName == b.merchantName &&
         a.date == b.date &&
         a.totalAmount == b.totalAmount &&
@@ -528,6 +555,8 @@ class LocalStorageService {
     if (!archiveDir.existsSync()) {
       await archiveDir.create(recursive: true);
     }
+    // Archived images are copied into app storage so later verification does
+    // not depend on a temporary camera/gallery path still existing.
     final ext = p.extension(sourcePath).isEmpty
         ? '.jpg'
         : p.extension(sourcePath);
@@ -541,6 +570,8 @@ class LocalStorageService {
     Receipt receipt,
     String? archivedImagePath,
   ) async {
+    // The archive hash covers both receipt fields and image bytes so "verify
+    // hash" checks the full archived record, not only its text metadata.
     final content = StringBuffer()
       ..writeln(receipt.id)
       ..writeln(receipt.merchantName)
@@ -576,6 +607,8 @@ class LocalStorageService {
   }
 
   Future<void> _backfillArchives() async {
+    // Any legacy receipt missing archive metadata gets a baseline archive entry
+    // here so export and verification features work uniformly.
     for (final receipt in _receipts.values) {
       if (_archives.containsKey(receipt.id)) continue;
       final archivedImagePath = await _archiveImage(

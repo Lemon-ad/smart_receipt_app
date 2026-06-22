@@ -43,6 +43,8 @@ class ReportCustomRangeNotifier extends Notifier<(DateTime, DateTime)?> {
 }
 
 final filteredReportReceiptsProvider = Provider<List<Receipt>>((ref) {
+  // Reporting is derived directly from stored receipts, so every save/edit
+  // automatically flows into the dashboard without a second reporting table.
   final range = ref.watch(reportRangeProvider);
   final receipts = ref.watch(receiptsProvider);
   final now = DateTime.now();
@@ -61,12 +63,10 @@ final filteredReportReceiptsProvider = Provider<List<Receipt>>((ref) {
     case ReportRange.custom:
       final custom = ref.watch(reportCustomRangeProvider);
       if (custom != null) {
+        // Adding one day makes the end date inclusive for the user while still
+        // using an exclusive upper bound in code.
         start = DateTime(custom.$1.year, custom.$1.month, custom.$1.day);
-        end = DateTime(
-          custom.$2.year,
-          custom.$2.month,
-          custom.$2.day + 1,
-        );
+        end = DateTime(custom.$2.year, custom.$2.month, custom.$2.day + 1);
       } else {
         start = DateTime(now.year, now.month - 1);
         end = DateTime(now.year, now.month + 1);
@@ -87,6 +87,8 @@ final filteredReportReceiptsProvider = Provider<List<Receipt>>((ref) {
 });
 
 final reportTrendProvider = Provider<Map<String, dynamic>?>((ref) {
+  // Trend compares the current visible period against the previous equivalent
+  // period to make the percentage change fair across different ranges.
   final range = ref.watch(reportRangeProvider);
   final receipts = ref.watch(receiptsProvider);
   final now = DateTime.now();
@@ -116,11 +118,7 @@ final reportTrendProvider = Provider<Map<String, dynamic>?>((ref) {
       final custom = ref.watch(reportCustomRangeProvider);
       if (custom != null) {
         final duration = custom.$2.difference(custom.$1);
-        currentStart = DateTime(
-          custom.$1.year,
-          custom.$1.month,
-          custom.$1.day,
-        );
+        currentStart = DateTime(custom.$1.year, custom.$1.month, custom.$1.day);
         currentEnd = DateTime(
           custom.$2.year,
           custom.$2.month,
@@ -137,24 +135,18 @@ final reportTrendProvider = Provider<Map<String, dynamic>?>((ref) {
 
   final currentTotal = receipts
       .where(
-        (r) =>
-            !r.date.isBefore(currentStart) && r.date.isBefore(currentEnd),
+        (r) => !r.date.isBefore(currentStart) && r.date.isBefore(currentEnd),
       )
       .fold<double>(0, (sum, r) => sum + r.totalAmount);
 
   final previousTotal = receipts
       .where(
-        (r) =>
-            !r.date.isBefore(previousStart) && r.date.isBefore(previousEnd),
+        (r) => !r.date.isBefore(previousStart) && r.date.isBefore(previousEnd),
       )
       .fold<double>(0, (sum, r) => sum + r.totalAmount);
 
   if (previousTotal <= 0) return null;
 
   final change = ((currentTotal - previousTotal) / previousTotal) * 100;
-  return {
-    'current': currentTotal,
-    'previous': previousTotal,
-    'change': change,
-  };
+  return {'current': currentTotal, 'previous': previousTotal, 'change': change};
 });

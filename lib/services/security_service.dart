@@ -12,6 +12,8 @@ final securityServiceProvider = Provider<SecurityService>((ref) {
   throw UnimplementedError('SecurityService is provided in main.dart');
 });
 
+// The UI only needs safe profile fields; secrets and hashes stay private to the
+// service layer.
 class SecurityProfile {
   const SecurityProfile({
     required this.id,
@@ -118,6 +120,7 @@ class SecurityService {
   static const _legacyBiometricEnabledKey = 'security_biometric_enabled';
 
   Future<List<SecurityProfile>> listProfiles() async {
+    // Sorting keeps the saved-account list stable and easier to scan at login.
     final accounts = await _readAccounts();
     accounts.sort(
       (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
@@ -151,6 +154,7 @@ class SecurityService {
       id: const Uuid().v4(),
       name: name.trim(),
       email: normalizedEmail,
+      // Passwords are stored as SHA-256 hashes rather than plain text.
       passwordHash: _hash(password),
       pinHash: pin == null || pin.isEmpty ? null : _hash(pin),
       biometricEnabled: biometricEnabled,
@@ -184,6 +188,7 @@ class SecurityService {
     final updated = current.copyWith(
       name: name.trim(),
       email: normalizedEmail,
+      // Empty password means "leave the current password unchanged".
       passwordHash: password == null || password.isEmpty
           ? null
           : _hash(password),
@@ -227,6 +232,8 @@ class SecurityService {
 
   Future<bool> canUseBiometrics() async {
     try {
+      // Unsupported devices and some emulators can throw, so this returns
+      // a safe false instead of crashing the settings or login flow.
       final supported = await _localAuth.isDeviceSupported();
       final available = await _localAuth.getAvailableBiometrics();
       return supported && available.isNotEmpty;
@@ -277,6 +284,7 @@ class SecurityService {
     if (existing != null) {
       return Uint8List.fromList(base64Decode(existing));
     }
+    // 32 secure random bytes are used as the persistent encryption key for Hive.
     final random = Random.secure();
     final bytes = Uint8List.fromList(
       List<int>.generate(32, (_) => random.nextInt(256)),
@@ -294,6 +302,8 @@ class SecurityService {
   }
 
   Future<List<_SecurityAccount>> _readAccounts() async {
+    // This lazy migration keeps older single-account installs compatible with
+    // the newer multi-account local auth model.
     await _migrateLegacyAccountIfNeeded();
     final raw = await _storage.read(key: _accountsKey);
     if (raw == null || raw.isEmpty) return [];

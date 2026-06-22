@@ -57,6 +57,8 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
     final existing = widget.existingReceipt;
     _currentImagePath = widget.imagePath ?? existing?.imagePath;
     if (existing != null) {
+      // Edit mode reuses the saved receipt data directly instead of re-running
+      // OCR, which keeps user corrections intact.
       _merchant.text = existing.merchantName;
       _amount.text = existing.totalAmount.toStringAsFixed(2);
       _category.text = existing.category;
@@ -70,6 +72,7 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
       _items.addAll(existing.items);
       _loading = false;
     } else if (widget.manualEntry || widget.imagePath == null) {
+      // Manual entry skips extraction and opens the form immediately.
       _loading = false;
     } else {
       _process();
@@ -80,6 +83,8 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
     setState(() => _loading = true);
     try {
       debugPrint('[Review] Starting OCR for imagePath=$_currentImagePath');
+      // OCR extracts raw text first; the LLM parser then turns that text into
+      // structured receipt fields such as merchant, amount, and category.
       final raw = await OcrService().extractText(_currentImagePath ?? '');
       debugPrint('[Review] OCR complete. rawLength=${raw.length}');
       final parsed = await LlmService().parseReceipt(raw);
@@ -99,6 +104,8 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
         ..addAll(parsed.items);
     } catch (error) {
       debugPrint('[Review] Extraction failed: $error');
+      // Extraction is allowed to fail gracefully because the user can still
+      // complete the receipt manually from the same screen.
       _error = 'Extraction failed. You can still enter the fields manually.';
     }
     if (mounted) setState(() => _loading = false);
@@ -114,6 +121,8 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
     final ext = picked.path.split('.').lastOrNull ?? 'jpg';
     final newPath =
         '${dir.path}/receipt_scan_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    // Copy the chosen image into app storage so later save/archive steps do not
+    // depend on a temporary picker path disappearing.
     await File(picked.path).copy(newPath);
 
     setState(() {
@@ -197,8 +206,7 @@ class _ReceiptReviewScreenState extends ConsumerState<ReceiptReviewScreen> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child:
-                              hasImage
+                          child: hasImage
                               ? Image.file(
                                   File(_currentImagePath!),
                                   fit: BoxFit.cover,

@@ -15,6 +15,8 @@ class ReceiptsNotifier extends Notifier<List<Receipt>> {
 
   @override
   List<Receipt> build() {
+    // Rebuild when the active account changes so each user sees only their own
+    // saved receipts without manual screen refresh logic.
     ref.watch(securityProvider.select((state) => state.currentAccountId));
     _storage = ref.read(localStorageProvider);
     return _storage.receipts;
@@ -22,6 +24,8 @@ class ReceiptsNotifier extends Notifier<List<Receipt>> {
 
   Future<void> save(Receipt receipt) async {
     await _storage.upsertReceipt(receipt);
+    // We always re-read from storage after a write so the provider reflects the
+    // persisted truth, not just an optimistic in-memory edit.
     state = _storage.receipts;
     debugPrint(
       '[ReceiptsProvider] Saved receipt id=${receipt.id}. visibleCount=${state.length}',
@@ -49,6 +53,7 @@ class ReceiptsNotifier extends Notifier<List<Receipt>> {
 }
 
 final receiptByIdProvider = Provider.family<Receipt?, String>((ref, id) {
+  // Riverpod families are handy for "lookup by id" patterns across screens.
   return ref
       .watch(receiptsProvider)
       .where((receipt) => receipt.id == id)

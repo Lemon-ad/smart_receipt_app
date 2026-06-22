@@ -16,6 +16,8 @@ class ExportService {
     List<Receipt> receipts, {
     Map<String, ReceiptArchive> archives = const {},
   }) async {
+    // CSV is meant for spreadsheet follow-up, so it includes richer raw archive
+    // metadata such as timestamps and the full SHA-256 value.
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/smart_receipt_export.csv');
     final rows = [
@@ -33,6 +35,8 @@ class ExportService {
     List<Receipt> receipts, {
     Map<String, ReceiptArchive> archives = const {},
   }) async {
+    // PDF is the presentation-friendly export, but it still includes the hash
+    // and lock status so archive integrity can be shown during review.
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/smart_receipt_report.pdf');
     final doc = pw.Document();
@@ -131,6 +135,8 @@ class ExportService {
   }
 
   Future<void> share(File file) async {
+    // Native sharing keeps export destination flexible instead of hard-coding a
+    // file location or assuming the user wants only local storage.
     await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
   }
 }
